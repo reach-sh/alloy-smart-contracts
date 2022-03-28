@@ -6,7 +6,8 @@ import {
   defToks,
   NUM_OF_NFTS,
   NFT_COST,
-  chkValidToks
+  chkValidToks,
+  removeFromArray
 } from './utils.rsh'
 
 export const main = Reach.App(() => {
@@ -16,7 +17,7 @@ export const main = Reach.App(() => {
 
   const Gashapon = API('Gashapon', {
     load: Fun([NFTs], Null),
-    insertToken: Fun([UInt], Null),
+    insertToken: Fun([UInt], Maybe(Token)),
   })
 
   init()
@@ -31,7 +32,11 @@ export const main = Reach.App(() => {
 
   require(balance() === 0)
 
-  const [nftsInMachine, R, tokensTaken] = parallelReduce([defToks, 2, 0])
+  const [nftsInMachine, R, toksTkn] = parallelReduce([
+    defToks,
+    0,
+    0,
+  ])
     .invariant(balance() === 0)
     .while(nftsInMachine.length > 0)
     .paySpec([payToken])
@@ -51,7 +56,7 @@ export const main = Reach.App(() => {
         require(NFTsForMachine.length ==
           NUM_OF_NFTS, 'require number of NFTs correct')
         require(chkValidToks(NFTsForMachine), 'require all items are tokens')
-        const val = [NFTsForMachine, R, tokensTaken]
+        const val = [NFTsForMachine, R, toksTkn]
         k(null)
         return val
       }
@@ -64,16 +69,24 @@ export const main = Reach.App(() => {
           rNum <= nftsInMachine.length - 1,
           'assume item is in the bounds of array'
         )
+        assume(toksTkn <= nftsInMachine.length)
       },
       _ => [0, [NFT_COST, payToken]],
       (rNum, k) => {
         const rN = getRNum(rNum, R)
+        const maxIndex = nftsInMachine.length - 1
         require(nftsInMachine.length > 0, 'require machine has NFTs')
         require(rN <=
           nftsInMachine.length - 1, 'require item is in the bounds of array')
         require(isSome(nftsInMachine[rN]), 'require there is an NFT')
-        const val = [nftsInMachine, rN, tokensTaken]
-        k(null)
+        require(toksTkn <= nftsInMachine.length)
+        const [retrievedTok, newArr] = removeFromArray(
+          nftsInMachine,
+          rN,
+          maxIndex - toksTkn
+        )
+        const val = [newArr, rN, toksTkn + 1]
+        k(retrievedTok)
         return val
       }
     )
