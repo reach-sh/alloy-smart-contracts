@@ -85,6 +85,8 @@ export const main = Reach.App(() => {
           rN,
           maxIndex - toksTkn
         )
+        // How can I get this to work?
+        // transfer(1, retrievedTok).to(this)
         const val = [newArr, rN, toksTkn + 1]
         k(retrievedTok)
         return val
