@@ -10,6 +10,15 @@ import {
   removeFromArray
 } from './utils.rsh'
 
+const sendNft = (tok, user) => {
+  switch (tok) {
+    case None:
+      assert(false)
+    case Some:
+      transfer(1, tok).to(user)
+  }
+}
+
 export const main = Reach.App(() => {
   const Owner = Participant('Owner', {
     payToken: Token,
@@ -32,11 +41,7 @@ export const main = Reach.App(() => {
 
   require(balance() === 0)
 
-  const [nftsInMachine, R, toksTkn] = parallelReduce([
-    defToks,
-    0,
-    0,
-  ])
+  const [nftsInMachine, R, toksTkn] = parallelReduce([defToks, 0, 0])
     .invariant(balance() === 0)
     .while(nftsInMachine.length > 0)
     .paySpec([payToken])
@@ -85,8 +90,8 @@ export const main = Reach.App(() => {
           rN,
           maxIndex - toksTkn
         )
-        // How can I get this to work?
-        // transfer(1, retrievedTok).to(this)
+        check(isSome(retrievedTok))
+        sendNft(retrievedTok, this)
         const val = [newArr, rN, toksTkn + 1]
         k(retrievedTok)
         return val
