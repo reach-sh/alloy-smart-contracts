@@ -42,7 +42,7 @@ export const removeFromArray = (arr, i, sz) => {
   const k = sz == 0 ? 0 : sz - 1
   const ip = i % sz
   const v = arr[ip]
-  const nullEndArr = Array.set(arr, k, nTok)
-  const newArr = Array.set(nullEndArr, ip, arr[k])
-  return [v, newArr]
+  const newArr = Array.set(arr, ip, arr[k])
+  const nullEndArr = Array.set(newArr, k, nTok)
+  return [v, nullEndArr]
 }

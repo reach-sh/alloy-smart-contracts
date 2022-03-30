@@ -27,14 +27,13 @@ export const main = Reach.App(() => {
   })
   Owner.publish(payToken)
 
-  // const getRNum = (N, R, time) => R ^ digest(time) ^ digest(N)
-  const getRNum = (N, R) => R + N
+  const getRNum = (N, R) => digest(N, R, lastConsensusTime(), lastConsensusSecs())
 
   require(balance() === 0)
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([
     defToks,
-    0,
+    digest(0),
     0,
   ])
     .invariant(balance() === 0)
@@ -64,7 +63,7 @@ export const main = Reach.App(() => {
     .api(
       Gashapon.insertToken,
       rNum => {
-        assume(nftsInMachine.length > 0, 'assume machine has NFTs')
+        assume(nftsInMachine.length - toksTkn > 0, 'assume machine has NFTs')
         assume(
           rNum <= nftsInMachine.length - 1,
           'assume item is in the bounds of array'
@@ -74,18 +73,21 @@ export const main = Reach.App(() => {
       _ => [0, [NFT_COST, payToken]],
       (rNum, k) => {
         const rN = getRNum(rNum, R)
-        const maxIndex = nftsInMachine.length - 1
-        require(nftsInMachine.length > 0, 'require machine has NFTs')
-        require(rN <=
-          nftsInMachine.length - 1, 'require item is in the bounds of array')
-        require(isSome(nftsInMachine[rN]), 'require there is an NFT')
+        const newR = digest(rN)
+        const nonTakenLength = nftsInMachine.length - toksTkn
+        const index = rN % nonTakenLength
+        const maxIndex = nonTakenLength - 1
+        require(nonTakenLength > 0, 'require machine has NFTs')
+        require(index <=
+          maxIndex, 'require item is in the bounds of array')
+        require(isSome(nftsInMachine[index]), 'require there is an NFT')
         require(toksTkn <= nftsInMachine.length)
         const [retrievedTok, newArr] = removeFromArray(
           nftsInMachine,
-          rN,
-          maxIndex - toksTkn
+          index,
+          maxIndex
         )
-        const val = [newArr, rN, toksTkn + 1]
+        const val = [newArr, newR, toksTkn + 1]
         k(retrievedTok)
         return val
       }
