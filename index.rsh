@@ -113,6 +113,8 @@ export const main = Reach.App(() => {
         const user = this
         check(typeOf(tMap[user]) == Token)
         const userTok = tMap[user]
+        const val = [nftsInMachine, R, toksTkn]
+        k(null)
         switch (userTok) {
           case None:
             check(balance() == 0)
@@ -120,8 +122,6 @@ export const main = Reach.App(() => {
             check(balance(userTok) > 0)
         }
         sendNft(user, tMap)
-        const val = [nftsInMachine, R, toksTkn]
-        k(null)
         return val
       }
     )
