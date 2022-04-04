@@ -32,7 +32,16 @@ export const main = Reach.App(() => {
   Owner.publish(payToken, nfts)
   commit()
 
-  Owner.publish(tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8)
+  Owner.publish(tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8).pay([
+    [1, tok1],
+    [1, tok2],
+    [1, tok3],
+    [1, tok4],
+    [1, tok5],
+    [1, tok6],
+    [1, tok7],
+    [1, tok8],
+  ])
   const tokens = array(Token, [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8])
   const tMap = new Map(Token)
   commit()
@@ -49,6 +58,7 @@ export const main = Reach.App(() => {
     digest(N, R, thisConsensusTime(), thisConsensusSecs())
 
   check(balance() === 0)
+  check(tokens.all(t => balance(t) > 0), "NFTs are loaded")
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([nfts, digest(0), 0])
     .invariant(balance() === 0)
