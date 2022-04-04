@@ -62,7 +62,7 @@ export const main = Reach.App(() => {
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([nfts, digest(0), 0])
     .invariant(balance() === 0)
-    .while(nftsInMachine.length > 0)
+    .while(toksTkn < nftsInMachine.length)
     .paySpec([payToken])
     .api(
       Gashapon.insertToken,
@@ -97,6 +97,7 @@ export const main = Reach.App(() => {
 
   transfer(balance()).to(Owner)
   transfer(balance(payToken), payToken).to(Owner)
+  tokens.forEach(tok => transfer(balance(tok), tok).to(Owner))
 
   commit()
   exit()
