@@ -46,5 +46,7 @@ export const sendNft = (user, m) => {
   }
 }
 
+// TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
+  // const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 export const getRNum = (N, R) =>
   digest(N, R, thisConsensusTime(), thisConsensusSecs())

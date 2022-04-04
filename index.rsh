@@ -76,6 +76,7 @@ export const main = Reach.App(() => {
         const maxIndex = nonTakenLength - 1
         check(nonTakenLength > 0, 'assume machine has NFTs')
         check(index <= maxIndex, 'assume item is in the bounds of array')
+        check(isSome(nftsInMachine[index]), 'assume nft is at location')
         check(NFT_COST == 1)
       },
       _ => [0, [NFT_COST, payToken]],
@@ -86,7 +87,8 @@ export const main = Reach.App(() => {
         const maxIndex = nonTakenLength - 1
         check(nonTakenLength > 0, 'require machine has NFTs')
         check(index <= maxIndex, 'require item is in the bounds of array')
-        const [v, newArr] = removeFromArray(nftsInMachine, rN, maxIndex)
+        check(isSome(nftsInMachine[index]), 'require nft is at location')
+        const [v, newArr] = removeFromArray(nftsInMachine, index, maxIndex)
         const vSome = [newArr, rN, toksTkn + 1]
         k(null)
         assignTok(v, this, tMap, tokens)
