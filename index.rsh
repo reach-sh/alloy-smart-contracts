@@ -4,7 +4,11 @@
 import {
   NFTs,
   NFT_COST,
-  removeFromArray
+  removeFromArray,
+  chkValidToks,
+  assignTok,
+  getRNum,
+  sendNft
 } from './utils.rsh'
 
 export const main = Reach.App(() => {
@@ -16,16 +20,18 @@ export const main = Reach.App(() => {
   })
 
   const Gashapon = API('Gashapon', {
-    insertToken: Fun([UInt], Token),
+    insertToken: Fun([UInt], Null),
+    turnCrank: Fun([], Null),
   })
 
   init()
 
   Owner.only(() => {
-    const [payToken] = declassify([interact.payToken])
-    const [nfts, [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8]] = declassify(
-      [interact.set(), interact.load()]
-    )
+    const payToken = declassify(interact.payToken)
+    const nfts = declassify(interact.set())
+    chkValidToks(nfts)
+    const [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8] = declassify(interact.load())
+
     check(distinct(tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8, payToken))
   })
 
@@ -42,27 +48,24 @@ export const main = Reach.App(() => {
     [1, tok7],
     [1, tok8],
   ])
+
   const tokens = array(Token, [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8])
   const tMap = new Map(Token)
+
   commit()
 
   Owner.publish()
   Owner.interact.ready()
 
-  const sendNft = (tok, user) => {
-    tMap[user] = tok
-    transfer(1, tok).to(user)
-  }
-
-  const getRNum = (N, R) =>
-    digest(N, R, thisConsensusTime(), thisConsensusSecs())
-
   check(balance() === 0)
-  check(tokens.all(t => balance(t) > 0), "NFTs are loaded")
+  check(
+    tokens.all(t => balance(t) > 0),
+    'NFTs are loaded'
+  )
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([nfts, digest(0), 0])
     .invariant(balance() === 0)
-    .while(toksTkn < nftsInMachine.length)
+    .while(toksTkn < nftsInMachine.length - 1)
     .paySpec([payToken])
     .api(
       Gashapon.insertToken,
@@ -71,10 +74,8 @@ export const main = Reach.App(() => {
         const nonTakenLength = nftsInMachine.length - toksTkn
         const index = rN % nonTakenLength
         const maxIndex = nonTakenLength - 1
-        check(index <= tokens.length - 1)
         check(nonTakenLength > 0, 'assume machine has NFTs')
         check(index <= maxIndex, 'assume item is in the bounds of array')
-        check(balance(tokens[index]) > 0, 'assume contract has NFT')
         check(NFT_COST == 1)
       },
       _ => [0, [NFT_COST, payToken]],
@@ -83,14 +84,42 @@ export const main = Reach.App(() => {
         const nonTakenLength = nftsInMachine.length - toksTkn
         const index = rN % nonTakenLength
         const maxIndex = nonTakenLength - 1
-        check(index <= tokens.length - 1)
         check(nonTakenLength > 0, 'require machine has NFTs')
         check(index <= maxIndex, 'require item is in the bounds of array')
-        check(balance(tokens[index]) > 0, 'require contract has NFT')
-        const newArr = removeFromArray(nftsInMachine, rN, maxIndex)
-        sendNft(tokens[index], this)
-        const val = [newArr, rN, toksTkn + 1]
-        k(tokens[index])
+        const [v, newArr] = removeFromArray(nftsInMachine, rN, maxIndex)
+        const vSome = [newArr, rN, toksTkn + 1]
+        k(null)
+        assignTok(v, this, tMap, tokens)
+        return vSome
+      }
+    )
+    .api(
+      Gashapon.turnCrank,
+      () => {
+        const user = this
+        check(typeOf(tMap[user]) == Token)
+        const userTok = tMap[user]
+        switch (userTok) {
+          case None:
+            check(balance() == 0)
+          case Some:
+            check(balance(userTok) > 0)
+        }
+      },
+      () => [0, [0, payToken]],
+      k => {
+        const user = this
+        check(typeOf(tMap[user]) == Token)
+        const userTok = tMap[user]
+        switch (userTok) {
+          case None:
+            check(balance() == 0)
+          case Some:
+            check(balance(userTok) > 0)
+        }
+        sendNft(user, tMap)
+        const val = [nftsInMachine, R, toksTkn]
+        k(null)
         return val
       }
     )
