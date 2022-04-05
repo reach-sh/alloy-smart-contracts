@@ -7,6 +7,7 @@ const mTok = Maybe(Token)
 export const NFTs = Array(mTok, NUM_OF_NFTS)
 
 const nTok = Maybe(Token).None(null)
+export const defToks = Array.replicate(NUM_OF_NFTS, nTok)
 
 export const NFT_COST = 1
 
@@ -21,23 +22,14 @@ export const removeFromArray = (arr, i, sz) => {
   return [v, nullEndArr]
 }
 
-export const assignTok = (tok, user, m, tokens) => {
-  switch (tok) {
-    case None:
-      assert(true)
-    case Some:
-      const actualToken = tokens.find(t => t == tok)
-      switch (actualToken) {
-        case None:
-          assert(true)
-        case Some:
-          m[user] = actualToken
-      }
-  }
+export const addToArray = (arr, k, v) => {
+  const kp = k == 0 ? 0 : k + 1
+  check(k <= arr.length - 1)
+  const arrp = Array.set(arr, kp, Maybe(Token).Some(v))
+  return arrp
 }
 
-export const sendNft = (user, m) => {
-  const tok = m[user]
+export const sendNft = (user, tok) => {
   switch (tok) {
     case None:
       assert(true)

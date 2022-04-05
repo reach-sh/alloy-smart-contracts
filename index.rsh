@@ -2,71 +2,69 @@
 'use strict'
 
 import {
-  NFTs,
   NFT_COST,
   removeFromArray,
   chkValidToks,
-  assignTok,
   getRNum,
-  sendNft
+  sendNft,
+  defToks,
+  addToArray
 } from './utils.rsh'
 
 export const main = Reach.App(() => {
   const Owner = Participant('Owner', {
     payToken: Token,
     ready: Fun([], Null),
-    load: Fun([], Array(Token, 8)),
-    set: Fun([], NFTs),
   })
 
   const Gashapon = API('Gashapon', {
     insertToken: Fun([UInt], Null),
     turnCrank: Fun([], Null),
+    load: Fun([Array(Token, 8)], Array(Token, 8)),
   })
 
   init()
 
   Owner.only(() => {
     const payToken = declassify(interact.payToken)
-    const nfts = declassify(interact.set())
-    chkValidToks(nfts)
-    const [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8] = declassify(interact.load())
-
-    check(distinct(tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8, payToken))
   })
 
-  Owner.publish(payToken, nfts)
-  commit()
-
-  Owner.publish(tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8).pay([
-    [1, tok1],
-    [1, tok2],
-    [1, tok3],
-    [1, tok4],
-    [1, tok5],
-    [1, tok6],
-    [1, tok7],
-    [1, tok8],
-  ])
-
-  const tokens = array(Token, [tok1, tok2, tok3, tok4, tok5, tok6, tok7, tok8])
+  Owner.publish(payToken)
   const tMap = new Map(Token)
-
   commit()
 
-  Owner.publish()
   Owner.interact.ready()
 
   check(balance() === 0)
-  check(
-    tokens.all(t => balance(t) > 0),
-    'NFTs are loaded'
-  )
+  Owner.publish()
 
-  const [nftsInMachine, R, toksTkn] = parallelReduce([nfts, digest(0), 0])
+  const [nftsInMachine, R, toksTkn, loadedAmt] = parallelReduce([
+    defToks,
+    digest(0),
+    0,
+    0,
+  ])
     .invariant(balance() === 0)
     .while(toksTkn < nftsInMachine.length - 1)
     .paySpec([payToken])
+    .api(
+      Gashapon.load,
+      nftsToLoad => {
+        check(nftsToLoad.length <= nftsInMachine.length)
+        chkValidToks(nftsToLoad)
+        check(loadedAmt < nftsInMachine.length - 1)
+      },
+      _ => [0, [0, payToken]],
+      (nftsToLoad, k) => {
+        check(nftsToLoad.length <= nftsInMachine.length)
+        chkValidToks(nftsToLoad)
+        check(loadedAmt < nftsInMachine.length - 1)
+        const newArr = addToArray(nftsInMachine, loadedAmt, nftsToLoad[0])
+        const val = [newArr, R, toksTkn, loadedAmt + 1]
+        k(nftsToLoad)
+        return val
+      }
+    )
     .api(
       Gashapon.insertToken,
       rNum => {
@@ -89,9 +87,14 @@ export const main = Reach.App(() => {
         check(index <= maxIndex, 'require item is in the bounds of array')
         check(isSome(nftsInMachine[index]), 'require nft is at location')
         const [v, newArr] = removeFromArray(nftsInMachine, index, maxIndex)
-        const vSome = [newArr, rN, toksTkn + 1]
+        const vSome = [newArr, rN, toksTkn + 1, loadedAmt]
         k(null)
-        assignTok(v, this, tMap, tokens)
+        switch (v) {
+          case None:
+            assert(true)
+          case Some:
+            tMap[this] = v
+        }
         return vSome
       }
     )
@@ -99,8 +102,8 @@ export const main = Reach.App(() => {
       Gashapon.turnCrank,
       () => {
         const user = this
-        check(typeOf(tMap[user]) == Token)
         const userTok = tMap[user]
+        check(typeOf(userTok) == Token)
         switch (userTok) {
           case None:
             check(balance() == 0)
@@ -111,24 +114,17 @@ export const main = Reach.App(() => {
       () => [0, [0, payToken]],
       k => {
         const user = this
-        check(typeOf(tMap[user]) == Token)
         const userTok = tMap[user]
-        const val = [nftsInMachine, R, toksTkn]
+        check(typeOf(userTok) == Token)
+        const val = [nftsInMachine, R, toksTkn, loadedAmt]
         k(null)
-        switch (userTok) {
-          case None:
-            check(balance() == 0)
-          case Some:
-            check(balance(userTok) > 0)
-        }
-        sendNft(user, tMap)
+        sendNft(user, userTok)
         return val
       }
     )
 
   transfer(balance()).to(Owner)
   transfer(balance(payToken), payToken).to(Owner)
-  tokens.forEach(tok => transfer(balance(tok), tok).to(Owner))
 
   commit()
   exit()
