@@ -45,7 +45,7 @@ export const main = Reach.App(() => {
     0,
   ])
     .invariant(balance() === 0)
-    .while(toksTkn < nftsInMachine.length - 1)
+    .while(toksTkn < nftsInMachine.length)
     .paySpec([payToken])
     .api(
       Gashapon.load,
@@ -53,12 +53,14 @@ export const main = Reach.App(() => {
         check(nftsToLoad.length <= nftsInMachine.length)
         chkValidToks(nftsToLoad)
         check(loadedAmt < nftsInMachine.length - 1)
+        check(this == Owner)
       },
       _ => [0, [0, payToken]],
       (nftsToLoad, k) => {
         check(nftsToLoad.length <= nftsInMachine.length)
         chkValidToks(nftsToLoad)
         check(loadedAmt < nftsInMachine.length - 1)
+        check(this == Owner)
         const [newArr, newK] = loadNfts(nftsInMachine, loadedAmt, nftsToLoad)
         const val = [newArr, R, toksTkn, newK]
         k(nftsToLoad)
