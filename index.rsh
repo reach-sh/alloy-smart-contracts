@@ -8,7 +8,7 @@ import {
   getRNum,
   sendNft,
   defToks,
-  addToArray
+  loadNfts
 } from './utils.rsh'
 
 export const main = Reach.App(() => {
@@ -59,8 +59,8 @@ export const main = Reach.App(() => {
         check(nftsToLoad.length <= nftsInMachine.length)
         chkValidToks(nftsToLoad)
         check(loadedAmt < nftsInMachine.length - 1)
-        const newArr = addToArray(nftsInMachine, loadedAmt, nftsToLoad[0])
-        const val = [newArr, R, toksTkn, loadedAmt + 1]
+        const [newArr, newK] = loadNfts(nftsInMachine, loadedAmt, nftsToLoad)
+        const val = [newArr, R, toksTkn, newK]
         k(nftsToLoad)
         return val
       }

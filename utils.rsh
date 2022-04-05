@@ -1,7 +1,7 @@
 'reach 0.1'
 'use strict'
 
-export const NUM_OF_NFTS = 8
+export const NUM_OF_NFTS = 20
 
 const mTok = Maybe(Token)
 export const NFTs = Array(mTok, NUM_OF_NFTS)
@@ -22,11 +22,64 @@ export const removeFromArray = (arr, i, sz) => {
   return [v, nullEndArr]
 }
 
-export const addToArray = (arr, k, v) => {
-  const kp = k == 0 ? 0 : k + 1
-  check(k <= arr.length - 1)
-  const arrp = Array.set(arr, kp, Maybe(Token).Some(v))
-  return arrp
+// not sure this needs to be dynamic as the array length is specified...but oh well, it's done
+export const loadNfts = (arr, k, nfts) => {
+  const numOfItems = nfts.length
+  const ki = k == 0 ? 0 : k - 1
+  check(ki + (numOfItems - 1) <= arr.length - 1)
+  if (numOfItems === 8) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    const arr3 = arr2.set(ki + 2, Maybe(Token).Some(nfts[2]))
+    const arr4 = arr3.set(ki + 3, Maybe(Token).Some(nfts[3]))
+    const arr5 = arr4.set(ki + 4, Maybe(Token).Some(nfts[4]))
+    const arr6 = arr5.set(ki + 5, Maybe(Token).Some(nfts[5]))
+    const arr7 = arr6.set(ki + 6, Maybe(Token).Some(nfts[6]))
+    return [arr7.set(ki + 7, Maybe(Token).Some(nfts[7])), k + 8]
+  }
+  if (numOfItems === 7) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    const arr3 = arr2.set(ki + 2, Maybe(Token).Some(nfts[2]))
+    const arr4 = arr3.set(ki + 3, Maybe(Token).Some(nfts[3]))
+    const arr5 = arr4.set(ki + 4, Maybe(Token).Some(nfts[4]))
+    const arr6 = arr5.set(ki + 5, Maybe(Token).Some(nfts[5]))
+    return [arr6.set(ki + 6, Maybe(Token).Some(nfts[6])), k + 7]
+  }
+  if (numOfItems === 6) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    const arr3 = arr2.set(ki + 2, Maybe(Token).Some(nfts[2]))
+    const arr4 = arr3.set(ki + 3, Maybe(Token).Some(nfts[3]))
+    const arr5 = arr4.set(ki + 4, Maybe(Token).Some(nfts[4]))
+    return [arr5.set(ki + 5, Maybe(Token).Some(nfts[5])), k + 6]
+  }
+  if (numOfItems === 5) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    const arr3 = arr2.set(ki + 2, Maybe(Token).Some(nfts[2]))
+    const arr4 = arr3.set(ki + 3, Maybe(Token).Some(nfts[3]))
+    return [arr4.set(ki + 4, Maybe(Token).Some(nfts[4])), k + 5]
+  }
+  if (numOfItems === 4) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    const arr3 = arr2.set(ki + 2, Maybe(Token).Some(nfts[2]))
+    return [arr3.set(ki + 3, Maybe(Token).Some(nfts[3])), k + 4]
+  }
+  if (numOfItems === 3) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    const arr2 = arr1.set(ki + 1, Maybe(Token).Some(nfts[1]))
+    return [arr2.set(ki + 2, Maybe(Token).Some(nfts[2])), k + 3]
+  }
+  if (numOfItems === 2) {
+    const arr1 = arr.set(ki, Maybe(Token).Some(nfts[0]))
+    return [arr1.set(ki + 1, Maybe(Token).Some(nfts[1])), k + 2]
+  }
+  if (numOfItems === 1) {
+    return [arr.set(ki, Maybe(Token).Some(nfts[0])), k + 1]
+  }
+  return [arr, k]
 }
 
 export const sendNft = (user, tok) => {
@@ -39,6 +92,6 @@ export const sendNft = (user, tok) => {
 }
 
 // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
-  // const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
+// const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 export const getRNum = (N, R) =>
   digest(N, R, lastConsensusTime(), lastConsensusSecs())
