@@ -53,7 +53,7 @@ export const main = Reach.App(() => {
   )
 
   const tMap = new Map(Token)
-  
+
   Owner.interact.ready()
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([mToks, digest(0), 0])
@@ -71,6 +71,7 @@ export const main = Reach.App(() => {
         const nonTakenLength = nftsInMachine.length - toksTkn
         const index = rN % nonTakenLength
         const maxIndex = nonTakenLength - 1
+        check(this !== Owner, 'assume owner cannot get NFT')
         check(nonTakenLength > 0, 'assume machine has NFTs')
         check(index <= maxIndex, 'assume item is in the bounds of array')
         check(isSome(nftsInMachine[index]), 'assume nft is at location')
@@ -83,6 +84,7 @@ export const main = Reach.App(() => {
         const nonTakenLength = nftsInMachine.length - toksTkn
         const index = rN % nonTakenLength
         const maxIndex = nonTakenLength - 1
+        check(this !== Owner, 'require owner cannot get NFT')
         check(nonTakenLength > 0, 'require machine has NFTs')
         check(index <= maxIndex, 'require item is in the bounds of array')
         check(isSome(nftsInMachine[index]), 'require nft is at location')
