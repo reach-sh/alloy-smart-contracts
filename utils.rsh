@@ -31,36 +31,28 @@ export const sendNft = (user, tok, tokens) => {
     case None:
       assert(true)
     case Some:
-      check(balance(foundTok) > 0, "ensure there is a token to send")
+      check(balance(foundTok) > 0, 'ensure there is a token to send')
       transfer(1, foundTok).to(user)
   }
 }
 
-
-export const chkTokBalance = (m, user, tokens) => {
-  const userTok = m[user]
-  const noUser = typeOf(userTok) == null || isNone(userTok)
-  if (noUser) {
-    return true
-  } else {
-    check(isSome(userTok), 'ensure the user has a token with data')
-    check(tokens.all(t => typeOf(t) == Token), 'ensure tokens array are all tokens')
-    const foundTok = tokens.find(actualTok => mT(actualTok) == userTok)
-    foundTok.match({
-      Some: tok => {
-        check(
-          balance(tok) > 0,
-          'check that there is a valid token for the registered user'
-        )
-      },
-      None: () => {
-        check(balance() == 0)
-      },
-    })
-    return true
-  }
+export const chkTokBalance = (m, tokens) => {
+  return m.all(t => {
+    check(typeOf(t) == Token, 'ensure the user has a token')
+    check(
+      tokens.all(tkn => typeOf(tkn) == Token),
+      'ensure tokens array are all tokens'
+    )
+    check(tokens.includes(t))
+    const foundTok = tokens.find(actualTok => actualTok == t)
+    switch (foundTok) {
+      case Some:
+        return balance(foundTok) > 0
+      case None:
+        return balance() == 0
+    }
+  })
 }
-
 
 // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
 // const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())

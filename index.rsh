@@ -38,13 +38,12 @@ export const main = Reach.App(() => {
     const [tok1, tok2] = declassify(interact.loadNfts())
     check(distinct(payToken, tok1, tok2))
   })
-  Owner.publish(tok1, tok2).pay([
-    [1, tok1],
-    [1, tok2],
-  ])
+  Owner.publish(tok1, tok2)
+  commit()
+
+  Owner.pay([[1, tok1], [1, tok2]])
 
   const tokActual = array(Token, [tok1, tok2])
-
   const mToks = array(Maybe(Token), [mT(tok1), mT(tok2)])
 
   chkValidToks(tokActual)
@@ -62,7 +61,7 @@ export const main = Reach.App(() => {
     .invariant(
       balance() === 0 &&
         balance(payToken) / NFT_COST == toksTkn &&
-        chkTokBalance(tMap, this, tokActual)
+        chkTokBalance(tMap, tokActual)
     )
     .while(toksTkn < nftsInMachine.length)
     .paySpec([payToken])
