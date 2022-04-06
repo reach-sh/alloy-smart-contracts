@@ -15,7 +15,7 @@ export const main = Reach.App(() => {
   const Owner = Participant('Owner', {
     payToken: Token,
     ready: Fun([], Null),
-    loadNfts: Fun([], Array(Token, 2)),
+    loadNfts: Fun([], Array(Token, 4)),
   })
 
   const Gashapon = API('Gashapon', {
@@ -27,24 +27,21 @@ export const main = Reach.App(() => {
 
   Owner.only(() => {
     const payToken = declassify(interact.payToken)
+    const [nft1, nft2, nft3, nft4] = declassify(interact.loadNfts())
+    check(distinct(payToken, nft1, nft2, nft3, nft4))
   })
-  Owner.publish(payToken)
-
-  const tMap = new Map(Token)
-
+  Owner.publish(payToken, nft1, nft2, nft3, nft4)
   commit()
 
-  Owner.only(() => {
-    const [tok1, tok2] = declassify(interact.loadNfts())
-    check(distinct(payToken, tok1, tok2))
-  })
-  Owner.publish(tok1, tok2)
-  commit()
+  Owner.pay([
+    [1, nft1],
+    [1, nft2],
+    [1, nft3],
+    [1, nft4],
+  ])
 
-  Owner.pay([[1, tok1], [1, tok2]])
-
-  const tokActual = array(Token, [tok1, tok2])
-  const mToks = array(Maybe(Token), [mT(tok1), mT(tok2)])
+  const tokActual = array(Token, [nft1, nft2, nft3, nft4])
+  const mToks = array(Maybe(Token), [mT(nft1), mT(nft2), mT(nft3), mT(nft4)])
 
   chkValidToks(tokActual)
   check(mToks.all(i => isSome(i)))
@@ -55,6 +52,8 @@ export const main = Reach.App(() => {
     'ensure all tokens are loaded'
   )
 
+  const tMap = new Map(Token)
+  
   Owner.interact.ready()
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([mToks, digest(0), 0])
@@ -102,17 +101,6 @@ export const main = Reach.App(() => {
     )
     .api(
       Gashapon.turnCrank,
-      () => {
-        const userTok = tMap[this]
-        const foundTok = tokActual.find(actualTok => mT(actualTok) == userTok)
-        assert(isSome(foundTok))
-        switch (foundTok) {
-          case None:
-            assert(true)
-          case Some:
-            check(balance(foundTok) > 0, 'chck tok balance')
-        }
-      },
       () => [0, [0, payToken]],
       k => {
         const user = this
