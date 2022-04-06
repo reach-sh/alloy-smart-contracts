@@ -60,7 +60,7 @@ export const main = Reach.App(() => {
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([mToks, digest(0), 0])
     .invariant(
-      balance() === 0 && chkTokBalance(tMap, this, tokActual)
+      balance() === 0 && balance(payToken) == toksTkn && chkTokBalance(tMap, this, tokActual)
     )
     .while(toksTkn < nftsInMachine.length)
     .paySpec([payToken])
@@ -104,6 +104,7 @@ export const main = Reach.App(() => {
       () => {
         const userTok = tMap[this]
         const foundTok = tokActual.find(actualTok => mT(actualTok) == userTok)
+        check(isSome(foundTok))
         switch (foundTok) {
           case None:
             assert(true)
