@@ -61,7 +61,7 @@ export const main = Reach.App(() => {
   const [nftsInMachine, R, toksTkn] = parallelReduce([mToks, digest(0), 0])
     .invariant(
       balance() === 0 &&
-        balance(payToken) == toksTkn &&
+        balance(payToken) / NFT_COST == toksTkn &&
         chkTokBalance(tMap, this, tokActual)
     )
     .while(toksTkn < nftsInMachine.length)
