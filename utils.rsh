@@ -33,6 +33,7 @@ export const sendNft = (user, tok, tokens) => {
     case Some:
       check(balance(foundTok) > 0, 'ensure there is a token to send')
       transfer(1, foundTok).to(user)
+      check(balance(foundTok) == 0)
   }
 }
 
