@@ -36,6 +36,7 @@ export const sendNft = (user, tok, tokens) => {
   }
 }
 
+
 export const chkTokBalance = (m, user, tokens) => {
   const userTok = m[user]
   const noUser = typeOf(userTok) == null || isNone(userTok)
@@ -45,10 +46,16 @@ export const chkTokBalance = (m, user, tokens) => {
     check(isSome(userTok), 'ensure the user has a token with data')
     check(tokens.all(t => typeOf(t) == Token), 'ensure tokens array are all tokens')
     const foundTok = tokens.find(actualTok => mT(actualTok) == userTok)
-    check(isSome(foundTok), "ensure found token has data")
     foundTok.match({
-      Some: tok => { check(balance(tok) > 0, 'check that there is a valid token for the registered user') },
-      None: () => { check(balance() == 0) },
+      Some: tok => {
+        check(
+          balance(tok) > 0,
+          'check that there is a valid token for the registered user'
+        )
+      },
+      None: () => {
+        check(balance() == 0)
+      },
     })
     return true
   }

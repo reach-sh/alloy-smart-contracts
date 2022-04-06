@@ -60,7 +60,9 @@ export const main = Reach.App(() => {
 
   const [nftsInMachine, R, toksTkn] = parallelReduce([mToks, digest(0), 0])
     .invariant(
-      balance() === 0 && balance(payToken) == toksTkn && chkTokBalance(tMap, this, tokActual)
+      balance() === 0 &&
+        balance(payToken) == toksTkn &&
+        chkTokBalance(tMap, this, tokActual)
     )
     .while(toksTkn < nftsInMachine.length)
     .paySpec([payToken])
@@ -87,7 +89,7 @@ export const main = Reach.App(() => {
         check(index <= maxIndex, 'require item is in the bounds of array')
         check(isSome(nftsInMachine[index]), 'require nft is at location')
         const [v, newArr] = removeFromArray(nftsInMachine, index, maxIndex)
-        const vSome = [newArr, rN, toksTkn + 1]
+        const val = [newArr, rN, toksTkn + 1]
         k(null)
         switch (v) {
           case None:
@@ -96,7 +98,7 @@ export const main = Reach.App(() => {
             check(typeOf(tMap[this]) == null, 'require user is not registered')
             tMap[this] = v
         }
-        return vSome
+        return val
       }
     )
     .api(
@@ -104,7 +106,7 @@ export const main = Reach.App(() => {
       () => {
         const userTok = tMap[this]
         const foundTok = tokActual.find(actualTok => mT(actualTok) == userTok)
-        check(isSome(foundTok))
+        assert(isSome(foundTok))
         switch (foundTok) {
           case None:
             assert(true)
@@ -116,10 +118,11 @@ export const main = Reach.App(() => {
       k => {
         const user = this
         const userTok = tMap[user]
-        check(typeOf(userTok) == Maybe(Token))
-        const val = [nftsInMachine, R, toksTkn]
+        check(isSome(userTok))
         k(null)
         sendNft(user, userTok, tokActual)
+        delete tMap[user]
+        const val = [nftsInMachine, R, toksTkn]
         return val
       }
     )
