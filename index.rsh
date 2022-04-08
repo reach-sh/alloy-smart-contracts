@@ -79,6 +79,7 @@ export const main = Reach.App(() => {
       },
       _ => [0, [NFT_COST, payToken]],
       (rNum, k) => {
+        k(null)
         const rN = getRNum(rNum, R)
         const nonTakenLength = nftsInMachine.length - toksTkn
         const index = rN % nonTakenLength
@@ -88,7 +89,6 @@ export const main = Reach.App(() => {
         check(isSome(nftsInMachine[index]), 'require nft is at location')
         const [v, newArr] = removeFromArray(nftsInMachine, index, maxIndex)
         const val = [newArr, rN, toksTkn + 1]
-        k(null)
         switch (v) {
           case None:
             assert(true)
@@ -103,10 +103,10 @@ export const main = Reach.App(() => {
       Gashapon.turnCrank,
       () => [0, [0, payToken]],
       k => {
+        k(null)
         const user = this
         const userTok = tMap[user]
         check(isSome(userTok))
-        k(null)
         sendNft(user, userTok, tokActual)
         delete tMap[user]
         const val = [nftsInMachine, R, toksTkn]
