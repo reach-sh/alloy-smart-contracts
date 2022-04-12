@@ -15,13 +15,14 @@ export const mT = tok => Maybe(Token).Some(tok)
 
 export const chkValidToks = arr => check(arr.all(i => typeOf(i) == Token))
 
-export const removeFromArray = (arr, i, sz) => {
+export const getNftCtc = (arr, i, sz) => {
   const k = sz == 0 ? 0 : sz - 1
   const ip = i % sz
-  const v = arr[ip]
+  const ctc = arr[ip]
+  const defCtc = getContract()
   const newArr = Array.set(arr, ip, arr[k])
-  const nullEndArr = Array.set(newArr, k, nTok)
-  return [v, nullEndArr]
+  const nullEndArr = Array.set(newArr, k, defCtc)
+  return [ctc, nullEndArr]
 }
 
 export const sendNft = (user, tok, tokens) => {
@@ -54,6 +55,18 @@ export const chkTokBalance = (m, tokens) => {
     }
   })
 }
+
+export const chkCtcValid = ctc =>
+  check(
+    typeOf(ctc) == Contract && ctc !== getContract(),
+    'could be invalid contract'
+  )
+
+export const dispenserI = {
+  setOwner: Fun([Address], Contract),
+  turnCrank: Fun([], Null),
+}
+
 
 // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
 // const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
