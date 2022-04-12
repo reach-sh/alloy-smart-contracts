@@ -16,7 +16,10 @@ const createNFts = (acc, amt) =>
   })
 
 const createNftCtcs = (acc, nfts) =>
-  nfts.map(nft => acc.contract(dispenserBackend))
+  nfts.map(nft => ({
+    nft,
+    ctc: acc.contract(dispenserBackend)
+  }))
 
 const deployNftCtcs = nftCtcs =>
   new Promise((resolve, reject) => {
@@ -27,11 +30,12 @@ const deployNftCtcs = nftCtcs =>
         resolve(ctcAddress)
         return
       }
-      nftCtcs[i].p.Machine({
+      nftCtcs[i].ctc.p.Machine({
         ready: ctc => {
           ctcAddress.push(ctc)
           deployCtc(i++)
         },
+        nft: nftCtcs[i].nft.id
       })
     }
     deployCtc()
@@ -42,7 +46,6 @@ const loadNfts = (nftCtcAdds, ctc) =>
     const pms = nftCtcAdds.map(ctcAdd => ctc.a.load(ctcAdd))
     const resolved = await Promise.all(pms)
     const fmt = resolved.map(res => stdlib.bigNumberToNumber(res))
-    console.log('loaded these contracts:', fmt)
     resolve(resolved)
   })
 
@@ -79,12 +82,17 @@ try {
       const info = await ctcOwner.getInfo()
       await loadNfts(nftCtcAdds, ctcOwner)
       console.log(`Successfully loaded ${nftCtcAdds.length} contracts!`)
-      await new Promise(r => setTimeout(r, 3000))
       const ctcUser = accUser.contract(authorityBackend, info)
-      await new Promise(r => setTimeout(r, 3000))
-      const { insertToken } = ctcUser.a
-      const y = await insertToken(stdlib.bigNumberify(2))
-      console.log('yay!')
+      const { insertToken, turnCrank } = ctcUser.a
+      const usrCtc = await insertToken(stdlib.bigNumberify(2))
+      const fmtCtc = stdlib.bigNumberToNumber(usrCtc)
+      console.log('Your NFT ctc is:', fmtCtc)
+      const [owner, ctcWithNft] = await turnCrank()
+      const fmtCtcWnft = stdlib.bigNumberToNumber(ctcWithNft)
+      console.log('This contract is ready for you to get your NFT:', fmtCtcWnft)
+      const nftCtcUser = accUser.contract(dispenserBackend, ctcWithNft)
+      const { getNft } = nftCtcUser.a
+      console.log('getNft', getNft)
     } catch (err) {
       console.log('Oops', err)
     }

@@ -1,41 +1,47 @@
 'reach 0.1'
 'use strict'
 
-import { dispenserI } from './utils.rsh'
-
 export const main = Reach.App(() => {
   const Machine = Participant('Machine', {
     ready: Fun([Contract], Null),
+    nft: Token,
   })
-  const api = API(dispenserI)
+  const api = API({
+    setOwner: Fun([Address], Address),
+    getNft: Fun([], Null),
+  })
 
   init()
   Machine.publish()
   commit()
-  Machine.publish()
+
+  Machine.only(() => {
+    const nft = declassify(interact.nft)
+  })
+
+  Machine.publish(nft)
+  commit()
+  Machine.pay([[1, nft]])
 
   Machine.interact.ready(getContract())
 
-  var [owner, receivedNft] = [Machine, false]
-  invariant(balance() == 0)
-  while (!receivedNft) {
-    commit()
-    const [[user], k1] = call(api.setOwner).assume(_ => {
-      check(Machine == this)
-    })
-    check(Machine == this)
-    k1(getContract())
-    commit()
-    const [_, k2] = call(api.turnCrank).assume(() => {
-      check(Machine !== this)
-      check(owner == this)
-    })
+  commit()
+
+  const [[owner], k1] = call(api.setOwner).assume(user => {
+    check(user == Machine, 'assume user is the machine')
+  })
+  check(owner == Machine, 'require user is the machine')
+  k1(owner)
+  commit()
+
+  const [_, k2] = call(api.getNft).assume(() => {
     check(Machine !== this)
     check(owner == this)
-    k2(null)
-    ;[owner, receivedNft] = [user, true]
+  })
+  check(Machine !== this)
+  check(owner == this)
+  transfer(balance(nft), nft).to(this)
+  k2(null)
 
-    continue
-  }
   commit()
 })

@@ -1,22 +1,17 @@
 'reach 0.1'
 'use strict'
 
-import {
-  getRNum,
-  NFT_COST,
-  getNftCtc,
-  chkCtcValid,
-  dispenserI
-} from './utils.rsh'
+import { getRNum, NFT_COST, getNftCtc, chkCtcValid } from './utils.rsh'
 
 export const main = Reach.App(() => {
   const Machine = Participant('Machine', {
     payToken: Token,
-    ready: Fun([], Null)
+    ready: Fun([], Null),
   })
   const api = API({
     load: Fun([Contract], Contract),
     insertToken: Fun([UInt], Contract),
+    turnCrank: Fun([], Tuple(Address, Contract)),
   })
 
   init()
@@ -28,15 +23,16 @@ export const main = Reach.App(() => {
   commit()
 
   Machine.publish()
-  
+
   const NUM_OF_NFTS = 9
   const defCtc = getContract()
   const NFT_CTCS = Array.replicate(NUM_OF_NFTS, defCtc)
-  
+
   Machine.interact.ready()
 
   const handlePmt = amt => [0, [amt, payToken]]
-  
+  const cMap = new Map(Contract)
+
   const [nftCtcs, R, toksTkn, loadedIndex] = parallelReduce([
     NFT_CTCS,
     digest(0),
@@ -62,6 +58,13 @@ export const main = Reach.App(() => {
     .api(
       api.insertToken,
       rNum => {
+        const userCtc = cMap[this]
+        switch (userCtc) {
+          case None:
+            assert(true)
+          case Some:
+            check(typeOf(userCtc) == null, 'assume user is not registered')
+        }
         const rN = getRNum(rNum, R)
         const nonTakenLength = nftCtcs.length - toksTkn
         const index = rN % nonTakenLength
@@ -73,6 +76,13 @@ export const main = Reach.App(() => {
       },
       _ => handlePmt(NFT_COST),
       (rNum, notify) => {
+        const userCtc = cMap[this]
+        switch (userCtc) {
+          case None:
+            assert(true)
+          case Some:
+            check(typeOf(userCtc) == null, 'assume user is not registered')
+        }
         const rN = getRNum(rNum, R)
         const nonTakenLength = nftCtcs.length - toksTkn
         const index = rN % nonTakenLength
@@ -80,10 +90,32 @@ export const main = Reach.App(() => {
         check(index <= loadedIndex, 'require index is of a loaded ctc')
         const [ctc, newCtcArr] = getNftCtc(nftCtcs, index, maxIndex)
         chkCtcValid(ctc)
-        const dispenserCtc = remote(ctc, dispenserI)
-        const userCtc = dispenserCtc.setOwner(this)
-        notify(userCtc)
+        cMap[this] = ctc
+        notify(ctc)
         return [newCtcArr, R, toksTkn + 1, loadedIndex]
+      }
+    )
+    .api(
+      api.turnCrank,
+      () => {
+        const ctc = cMap[this]
+        check(typeOf(ctc) !== null, 'assume user has inserted token')
+        const ctcFromsome = fromSome(ctc, getContract())
+        chkCtcValid(ctcFromsome)
+      },
+      () => handlePmt(0),
+      notify => {
+        const ctc = cMap[this]
+        check(typeOf(ctc) !== null, 'require user has inserted token')
+        const ctcFromsome = fromSome(ctc, getContract())
+        chkCtcValid(ctcFromsome)
+        const dispenserCtc = remote(ctcFromsome, {
+          setOwner: Fun([Address], Address),
+          getNft: Fun([], Null),
+        })
+        const owner = dispenserCtc.setOwner(this)
+        notify([owner, ctcFromsome])
+        return [nftCtcs, R, toksTkn, loadedIndex]
       }
     )
 
