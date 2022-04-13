@@ -11,7 +11,7 @@ export const main = Reach.App(() => {
   const api = API({
     load: Fun([Contract], Contract),
     insertToken: Fun([UInt], Contract),
-    turnCrank: Fun([], Tuple(Address, Contract)),
+    turnCrank: Fun([], Tuple(Token, Contract)),
   })
 
   init()
@@ -21,8 +21,8 @@ export const main = Reach.App(() => {
   })
   Machine.publish(payToken)
   commit()
+  Machine.pay(10)
 
-  Machine.publish()
 
   const NUM_OF_NFTS = 9
   const defCtc = getContract()
@@ -39,7 +39,7 @@ export const main = Reach.App(() => {
     0,
     0,
   ])
-    .invariant(balance() === 0 && balance(payToken) / NFT_COST == toksTkn)
+    .invariant(balance() === 10 && balance(payToken) / NFT_COST == toksTkn)
     .while(toksTkn < nftCtcs.length)
     .paySpec([payToken])
     .api(
@@ -110,11 +110,11 @@ export const main = Reach.App(() => {
         const ctcFromsome = fromSome(ctc, getContract())
         chkCtcValid(ctcFromsome)
         const dispenserCtc = remote(ctcFromsome, {
-          setOwner: Fun([Address], Address),
+          setOwner: Fun([Address], Token),
           getNft: Fun([], Null),
         })
-        const owner = dispenserCtc.setOwner(this)
-        notify([owner, ctcFromsome])
+        const nft = dispenserCtc.setOwner(this)
+        notify([nft, ctcFromsome])
         return [nftCtcs, R, toksTkn, loadedIndex]
       }
     )

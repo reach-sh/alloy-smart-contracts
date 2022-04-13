@@ -18,7 +18,7 @@ const createNFts = (acc, amt) =>
 const createNftCtcs = (acc, nfts) =>
   nfts.map(nft => ({
     nft,
-    ctc: acc.contract(dispenserBackend)
+    ctc: acc.contract(dispenserBackend),
   }))
 
 const deployNftCtcs = nftCtcs =>
@@ -35,7 +35,7 @@ const deployNftCtcs = nftCtcs =>
           ctcAddress.push(ctc)
           deployCtc(i++)
         },
-        nft: nftCtcs[i].nft.id
+        nft: nftCtcs[i].nft.id,
       })
     }
     deployCtc()
@@ -79,20 +79,44 @@ try {
   const onAppDeploy = async () => {
     console.log('App deployed!')
     try {
+      const balTYTBefore = await stdlib.balanceOf(accUser, payTokenId)
+      const fmtBalTYTBEfore = stdlib.bigNumberToNumber(balTYTBefore)
+      console.log('balance of TYT Token before', fmtBalTYTBEfore)
+
       const info = await ctcOwner.getInfo()
       await loadNfts(nftCtcAdds, ctcOwner)
       console.log(`Successfully loaded ${nftCtcAdds.length} contracts!`)
+
       const ctcUser = accUser.contract(authorityBackend, info)
       const { insertToken, turnCrank } = ctcUser.a
       const usrCtc = await insertToken(stdlib.bigNumberify(2))
       const fmtCtc = stdlib.bigNumberToNumber(usrCtc)
       console.log('Your NFT ctc is:', fmtCtc)
-      const [owner, ctcWithNft] = await turnCrank()
+      
+      const [nft, ctcWithNft] = await turnCrank()
+      const fmtNft = stdlib.bigNumberToNumber(nft)
+
+      const balUserBefore = await stdlib.balanceOf(accUser, fmtNft)
+      const fmtBalUserBefore = stdlib.bigNumberToNumber(balUserBefore)
+      console.log('balance of NFT before', fmtBalUserBefore)
+
+      await accUser.tokenAccept(fmtNft)
       const fmtCtcWnft = stdlib.bigNumberToNumber(ctcWithNft)
       console.log('This contract is ready for you to get your NFT:', fmtCtcWnft)
       const nftCtcUser = accUser.contract(dispenserBackend, ctcWithNft)
       const { getNft } = nftCtcUser.a
-      console.log('getNft', getNft)
+      const t = await getNft()
+
+      const balTYTAfter = await stdlib.balanceOf(accUser, payTokenId)
+      const fmtBalTYTAfter = stdlib.bigNumberToNumber(balTYTAfter)
+      console.log('balance of TYT Token after', fmtBalTYTAfter)
+
+      const balUserAfter = await stdlib.balanceOf(accUser, fmtNft)
+      const fmtBalUserAfter = stdlib.bigNumberToNumber(balUserAfter)
+      console.log('balance of NFT after', fmtBalUserAfter)
+
+      process.exit(0)
+
     } catch (err) {
       console.log('Oops', err)
     }

@@ -7,7 +7,7 @@ export const main = Reach.App(() => {
     nft: Token,
   })
   const api = API({
-    setOwner: Fun([Address], Address),
+    setOwner: Fun([Address], Token),
     getNft: Fun([], Null),
   })
 
@@ -23,25 +23,45 @@ export const main = Reach.App(() => {
   commit()
   Machine.pay([[1, nft]])
 
+  check(balance(nft) == 1)
+
   Machine.interact.ready(getContract())
 
-  commit()
-
-  const [[owner], k1] = call(api.setOwner).assume(user => {
-    check(user == Machine, 'assume user is the machine')
-  })
-  check(owner == Machine, 'require user is the machine')
-  k1(owner)
-  commit()
-
-  const [_, k2] = call(api.getNft).assume(() => {
-    check(Machine !== this)
-    check(owner == this)
-  })
-  check(Machine !== this)
-  check(owner == this)
-  transfer(balance(nft), nft).to(this)
-  k2(null)
-
+  const [owner, hasTakenNft, hasOwnerBeenSet] = parallelReduce([Machine, false, false])
+    .invariant(balance() == 0)
+    .while(!hasTakenNft)
+    .api(
+      api.setOwner,
+      newOwner => {
+        check(typeOf(newOwner) == Address)
+        check(!hasOwnerBeenSet)
+      },
+      _ => 0,
+      (newOwner, notify) => {
+        check(typeOf(newOwner) == Address)
+        check(!hasOwnerBeenSet)
+        notify(nft)
+        return [newOwner, hasTakenNft, true]
+      }
+    )
+    .api(
+      api.getNft,
+      () => {
+        check(hasOwnerBeenSet)
+        check(owner !== Machine)
+        check(balance(nft) == 1)
+      },
+      () => 0,
+      notify => {
+        check(balance(nft) == 1)
+        check(owner !== Machine)
+        check(hasOwnerBeenSet)
+        notify(null)
+        transfer(1, nft).to(owner)
+        return [owner, true, hasOwnerBeenSet]
+      }
+    )
+  transfer(balance()).to(Machine)
+  transfer(balance(nft), nft).to(Machine)
   commit()
 })
