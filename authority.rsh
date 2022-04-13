@@ -21,8 +21,7 @@ export const main = Reach.App(() => {
   })
   Machine.publish(payToken)
   commit()
-  Machine.pay(10)
-
+  Machine.publish()
 
   const NUM_OF_NFTS = 9
   const defCtc = getContract()
@@ -39,7 +38,7 @@ export const main = Reach.App(() => {
     0,
     0,
   ])
-    .invariant(balance() === 10 && balance(payToken) / NFT_COST == toksTkn)
+    .invariant(balance() === 0 && balance(payToken) / NFT_COST == toksTkn)
     .while(toksTkn < nftCtcs.length)
     .paySpec([payToken])
     .api(
