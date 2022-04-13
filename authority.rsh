@@ -114,6 +114,7 @@ export const main = Reach.App(() => {
           getNft: Fun([], Null),
         })
         const nft = dispenserCtc.setOwner(this)
+        delete cMap[this]
         notify([nft, ctcFromsome])
         return [nftCtcs, R, toksTkn, loadedIndex]
       }
