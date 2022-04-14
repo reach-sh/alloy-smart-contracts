@@ -36,7 +36,7 @@ export const machine = Reach.App(() => {
   const thisContract = getContract();
 
   const chkCtcValid = ctc => {
-    check(typeOf(ctc) == Contract && ctc !== getContract(), 'invalid contract');
+    check(typeOf(ctc) == Contract && ctc !== thisContract, 'invalid contract');
   }
 
   const handlePmt = amt => [0, [amt, payToken]];
