@@ -3,6 +3,9 @@
 
 import { getNftCtc } from './utils.rsh';
 
+const NUM_OF_NFTS = 437;
+const NFT_COST = 1;
+
 const dispenserI = {
   setOwner: Fun([Address], Token),
   getNft: Fun([], Token),
@@ -18,6 +21,8 @@ export const machine = Reach.App(() => {
     insertToken: Fun([UInt], Contract),
     turnCrank: Fun([], Tuple(Token, Contract)),
   });
+  
+  const NFT_CTCS = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
 
   init();
 
@@ -28,19 +33,17 @@ export const machine = Reach.App(() => {
   commit();
   Machine.publish();
 
-  const chkCtcValid = ctc =>
+  const thisContract = getContract();
+
+  const chkCtcValid = ctc => {
     check(typeOf(ctc) == Contract && ctc !== getContract(), 'invalid contract');
+  }
 
   const handlePmt = amt => [0, [amt, payToken]];
 
-  const NUM_OF_NFTS = 9;
-  const NFT_COST = 1;
-
-  const mC = getContract();
-  const NFT_CTCS = Array.replicate(NUM_OF_NFTS, mC);
   const cMap = new Map(Contract);
 
-  Machine.interact.ready(getContract());
+  Machine.interact.ready(thisContract);
 
   const [nftCtcs, R, toksTkn, loadedIndex] = parallelReduce([
     NFT_CTCS,
@@ -70,16 +73,20 @@ export const machine = Reach.App(() => {
         const maxIndex = nonTakenLength - 1;
         check(index <= loadedIndex, 'index is of a loaded ctc');
         const [ctc, newCtcArr] = getNftCtc(nftCtcs, index, maxIndex);
-        chkCtcValid(ctc);
+        const c = fromSome(ctc, thisContract)
+        chkCtcValid(c);
         check(newCtcArr.length == nftCtcs.length);
-        return () => [ctc, newCtcArr];
+        return () => [c, newCtcArr];
       };
       const checkValidUsr = user => {
         const userCtc = cMap[user];
         check(typeOf(userCtc) !== null, 'assume user has inserted token');
-        const ctcFromsome = fromSome(userCtc, getContract());
-        chkCtcValid(ctcFromsome);
-        return () => ctcFromsome;
+        const c = fromSome(userCtc, thisContract);
+        chkCtcValid(c);
+        return () => {
+          check(typeOf(c) == Contract)
+          return c;
+        }
       };
     })
     .invariant(balance() === 0 && balance(payToken) / NFT_COST == toksTkn)
@@ -93,7 +100,7 @@ export const machine = Reach.App(() => {
       _ => handlePmt(0),
       (contract, notify) => {
         check(loadedIndex <= nftCtcs.length - 1);
-        const newArr = nftCtcs.set(loadedIndex, contract);
+        const newArr = nftCtcs.set(loadedIndex, Maybe(Contract).Some(contract));
         notify(contract);
         return [newArr, R, toksTkn, loadedIndex + 1];
       }
@@ -175,7 +182,7 @@ export const dispenser = Reach.App(() => {
   check(owner !== mCtcAddr);
   check(owner !== Machine);
   k2(nft);
-  
+
   commit();
 
   const [[], k3] = call(api.getNft).assume(() => {
@@ -183,7 +190,7 @@ export const dispenser = Reach.App(() => {
     check(balance(nft) == 1);
   });
   check(this == owner);
-  check(balance(nft) == 1)
+  check(balance(nft) == 1);
   transfer(1, nft).to(this);
   check(balance(nft) == 0);
   k3(nft);
