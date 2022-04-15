@@ -3,5 +3,6 @@ build/
 .reach
 reach*
 node_modules
+Dockerfile
 
 yarn.lock
