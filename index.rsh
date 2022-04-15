@@ -4,7 +4,7 @@
 import { getNftCtc } from './utils.rsh';
 
 // 437
-const NUM_OF_NFTS = 20;
+const NUM_OF_NFTS = 200;
 const NFT_COST = 1;
 
 const dispenserI = {
