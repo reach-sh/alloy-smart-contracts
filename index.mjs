@@ -5,7 +5,7 @@ import * as dispenserBackend from './build/index.dispenser.mjs';
 const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
-const NUM_OF_NFTS = 200
+const NUM_OF_NFTS = 50;
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);
@@ -29,33 +29,34 @@ const createNftCtcs = (acc, nfts) =>
 
 // TODO: clean this function up
 // deploy NFT contracts to consensus network
-const deployNftCtcs = (nftCtcs, machineAddr) =>
-  new Promise((resolve, reject) => {
+const deployNftCtcs = (nftHs, machineAddr) => {
+  return new Promise((resolve, reject) => {
     let ctcAddress = [];
     let i = 0;
     const deployCtc = () => {
-      if (i === nftCtcs.length) {
+      if (i === nftHs.length) {
         resolve(ctcAddress);
         return;
       }
-      nftCtcs[i].ctc.p.Machine({
+      nftHs[i].ctc.p.Machine({
         ready: ctc => {
           ctcAddress.push(ctc);
           deployCtc(i++);
         },
-        nft: nftCtcs[i].nft.id,
+        nft: nftHs[i].nft.id,
         mCtcAddr: machineAddr,
       });
     };
     deployCtc();
   });
+};
 
 // load NFT contracts in machine contract
-const loadNfts = async (nftCtcAdds, ctc) => {
-  const pms = nftCtcAdds.map(ctcAdd => ctc.a.load(ctcAdd));
+const loadNfts = async nftCtcAdds => {
+  const pms = nftCtcAdds.map(ctcAdd => ctcMachine.a.load(ctcAdd));
   const resolved = await Promise.all(pms);
   const fmted = resolved.map(res => stdlib.bigNumberToNumber(res));
-  return Promise.resolve(fmted);
+  return fmted;
 };
 
 // helper for getting formatted token balance
@@ -66,7 +67,9 @@ const getTokBal = async (acc, tok) => {
 };
 
 // create users
-const [accMachine, accUser] = await stdlib.newTestAccounts(2, bal);
+const accMachine = await stdlib.newTestAccount(bal);
+// create machine contract
+const ctcMachine = accMachine.contract(machineBackend);
 
 // create pay token
 const { id: payTokenId } = await launchToken(
@@ -74,29 +77,15 @@ const { id: payTokenId } = await launchToken(
   'Reach Thank You',
   'RTYT'
 );
-await accUser.tokenAccept(payTokenId);
-await stdlib.transfer(accMachine, accUser, 100, payTokenId);
 
-// create machine contract
-const ctcMachine = accMachine.contract(machineBackend);
-
-const onAppDeploy = async () => {
+const getNftForUser = async (existingAcc, nftCtc) => {
   const info = await ctcMachine.getInfo();
 
-  // get machine contract address
-  const rawMachineAddr = await ctcMachine.getContractAddress();
-  const machineAddr = stdlib.formatAddress(rawMachineAddr);
+  const acc = existingAcc || (await stdlib.newTestAccount(bal));
+  await acc.tokenAccept(payTokenId);
+  await stdlib.transfer(accMachine, acc, 100, payTokenId);
 
-  // create NFT's, NFT dispenser contracts, and deploy NFT dispenser contracts
-  const nfts = await createNFts(accMachine, NUM_OF_NFTS);
-  const nftCtcs = createNftCtcs(accMachine, nfts);
-  const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
-
-  // load NFT contracts into machine
-  await loadNfts(nftCtcAdds, ctcMachine);
-  console.log(`Successfully loaded ${nftCtcAdds.length} contracts!`);
-
-  const ctcUser = accUser.contract(machineBackend, info);
+  const ctcUser = acc.contract(machineBackend, info);
   const { insertToken, turnCrank } = ctcUser.a;
 
   // assign the user an NFT via an NFT contract
@@ -105,19 +94,16 @@ const onAppDeploy = async () => {
   const fmtCtc = stdlib.bigNumberToNumber(dispenserCtc);
   console.log('Your dispenser ctc is:', fmtCtc);
 
-  const machineCtcDispenser = accMachine.contract(
-    dispenserBackend,
-    dispenserCtc
-  );
+  const ctcDispenser = acc.contract(dispenserBackend, nftCtc || dispenserCtc);
 
   // get the nft from the user's dispenser contract
-  const { nft } = machineCtcDispenser.v;
+  const { nft } = ctcDispenser.v;
   const [_, rawNft] = await nft();
   const fmtNft = stdlib.bigNumberToNumber(rawNft);
   console.log('NFT to get:', fmtNft);
 
   // opt-in to NFT/token
-  await accUser.tokenAccept(fmtNft);
+  await acc.tokenAccept(fmtNft);
   const fmtCtcWnft = stdlib.bigNumberToNumber(dispenserCtc);
   console.log(
     'The dispenser contract is ready for you to get your NFT:',
@@ -125,8 +111,8 @@ const onAppDeploy = async () => {
   );
 
   // get balances before getting NFT
-  const tytBalA = await getTokBal(accUser, payTokenId);
-  const nfBalA = await getTokBal(accUser, fmtNft);
+  const tytBalA = await getTokBal(acc, payTokenId);
+  const nfBalA = await getTokBal(acc, fmtNft);
   console.log('balance of TYT Token before', tytBalA);
   console.log('balance of NFT before', nfBalA);
 
@@ -134,16 +120,33 @@ const onAppDeploy = async () => {
   await turnCrank();
 
   // get NFT
-  const usrCtcDispenser = accUser.contract(dispenserBackend, dispenserCtc);
+  const usrCtcDispenser = acc.contract(dispenserBackend, dispenserCtc);
   const { getNft } = usrCtcDispenser.a;
   await getNft();
 
   // get balances after getting NFT
-  const tytBalB = await getTokBal(accUser, payTokenId);
-  const nfBalB = await getTokBal(accUser, fmtNft);
+  const tytBalB = await getTokBal(acc, payTokenId);
+  const nfBalB = await getTokBal(acc, fmtNft);
   console.log('balance of TYT Token after', tytBalB);
   console.log('balance of NFT after', nfBalB);
 
+  return [fmtCtc, fmtNft];
+};
+
+const onAppDeploy = async () => {
+  // get machine contract address
+  const rawMachineAddr = await ctcMachine.getContractAddress();
+  const machineAddr = stdlib.formatAddress(rawMachineAddr);
+
+  // create NFT's, NFT dispenser contracts, and deploy NFT dispenser contracts
+  const nfts = await createNFts(accMachine, NUM_OF_NFTS);
+  const nftCtcs = createNftCtcs(accMachine, nfts);
+  const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
+  await loadNfts(nftCtcAdds);
+
+  const [nftCtc1, nft1] = await getNftForUser();
+  const [nftCtc2, nft2] = await getNftForUser();
+  const [nftCtc, nft] = await getNftForUser();
   process.exit(0);
 };
 

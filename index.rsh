@@ -1,10 +1,8 @@
 'reach 0.1';
 'use strict';
 
-import { getNftCtc } from './utils.rsh';
-
 // 437
-const NUM_OF_NFTS = 200;
+const NUM_OF_NFTS = 50;
 const NFT_COST = 1;
 
 const dispenserI = {
@@ -22,7 +20,7 @@ export const machine = Reach.App(() => {
     insertToken: Fun([UInt], Contract),
     turnCrank: Fun([], Tuple(Token, Contract)),
   });
-  
+
   const NFT_CTCS = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
 
   init();
@@ -31,18 +29,15 @@ export const machine = Reach.App(() => {
     const payToken = declassify(interact.payToken);
   });
   Machine.publish(payToken);
-  commit();
-  Machine.publish();
+  const cMap = new Map(Contract);
 
   const thisContract = getContract();
 
   const chkCtcValid = ctc => {
     check(typeOf(ctc) == Contract && ctc !== thisContract, 'invalid contract');
-  }
+  };
 
   const handlePmt = amt => [0, [amt, payToken]];
-
-  const cMap = new Map(Contract);
 
   Machine.interact.ready(thisContract);
 
@@ -60,6 +55,15 @@ export const machine = Reach.App(() => {
       // hence the "lastConsensus" things instead
       const getRNum = N =>
         digest(N, R, lastConsensusTime(), lastConsensusSecs());
+      const getNftCtc = (arr, i, sz) => {
+        const k = sz == 0 ? 0 : sz - 1;
+        const ip = i % sz;
+        const ctc = arr[ip];
+        const defCtc = Maybe(Contract).None();
+        const newArr = Array.set(arr, ip, arr[k]);
+        const nullEndArr = Array.set(newArr, k, defCtc);
+        return [ctc, nullEndArr];
+      };
       const checkCtc = (rNum, user) => {
         const userCtc = cMap[user];
         switch (userCtc) {
@@ -75,7 +79,7 @@ export const machine = Reach.App(() => {
         const maxIndex = nonTakenLength - 1;
         check(index <= loadedIndex, 'index is of a loaded ctc');
         const [ctc, newCtcArr] = getNftCtc(nftCtcs, index, maxIndex);
-        const c = fromSome(ctc, thisContract)
+        const c = fromSome(ctc, thisContract);
         chkCtcValid(c);
         check(newCtcArr.length == nftCtcs.length);
         return () => [c, newCtcArr];
@@ -86,9 +90,9 @@ export const machine = Reach.App(() => {
         const c = fromSome(userCtc, thisContract);
         chkCtcValid(c);
         return () => {
-          check(typeOf(c) == Contract)
+          check(typeOf(c) == Contract);
           return c;
-        }
+        };
       };
     })
     .invariant(balance() === 0 && balance(payToken) / NFT_COST == toksTkn)
@@ -157,8 +161,6 @@ export const dispenser = Reach.App(() => {
   });
 
   init();
-  Machine.publish();
-  commit();
 
   Machine.only(() => {
     const nft = declassify(interact.nft);
@@ -178,26 +180,20 @@ export const dispenser = Reach.App(() => {
   const [[owner], k2] = call(api.setOwner).assume(nOwner => {
     check(this == mCtcAddr);
     check(nOwner !== mCtcAddr);
-    check(nOwner !== Machine);
   });
   check(this == mCtcAddr);
   check(owner !== mCtcAddr);
-  check(owner !== Machine);
   k2(nft);
 
   commit();
 
   const [[], k3] = call(api.getNft).assume(() => {
     check(this == owner);
-    check(balance(nft) == 1);
   });
   check(this == owner);
-  check(balance(nft) == 1);
   transfer(1, nft).to(this);
   check(balance(nft) == 0);
   k3(nft);
 
-  transfer(balance()).to(Machine);
-  transfer(balance(nft), nft).to(Machine);
   commit();
 });

@@ -4,5 +4,6 @@ build/
 reach*
 node_modules
 Dockerfile
+package.json
 
 yarn.lock
