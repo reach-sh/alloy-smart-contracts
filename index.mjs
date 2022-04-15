@@ -2,11 +2,15 @@ import { loadStdlib } from '@reach-sh/stdlib';
 import * as machineBackend from './build/index.machine.mjs';
 import * as dispenserBackend from './build/index.dispenser.mjs';
 
-const stdlib = loadStdlib();
+const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
+
+const NUM_OF_NFTS = 20
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);
+
+const getRandomNum = () => Math.floor(Math.random() * 20);
 
 // create the NFT's/tokens
 const createNFts = async (acc, amt) => {
@@ -84,7 +88,7 @@ const onAppDeploy = async () => {
   const machineAddr = stdlib.formatAddress(rawMachineAddr);
 
   // create NFT's, NFT dispenser contracts, and deploy NFT dispenser contracts
-  const nfts = await createNFts(accMachine, 9);
+  const nfts = await createNFts(accMachine, NUM_OF_NFTS);
   const nftCtcs = createNftCtcs(accMachine, nfts);
   const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
 
@@ -96,7 +100,8 @@ const onAppDeploy = async () => {
   const { insertToken, turnCrank } = ctcUser.a;
 
   // assign the user an NFT via an NFT contract
-  const dispenserCtc = await insertToken(stdlib.bigNumberify(2));
+  const rNum = getRandomNum();
+  const dispenserCtc = await insertToken(stdlib.bigNumberify(rNum));
   const fmtCtc = stdlib.bigNumberToNumber(dispenserCtc);
   console.log('Your dispenser ctc is:', fmtCtc);
 
@@ -104,10 +109,12 @@ const onAppDeploy = async () => {
     dispenserBackend,
     dispenserCtc
   );
+
   // get the nft from the user's dispenser contract
   const { nft } = machineCtcDispenser.v;
   const [_, rawNft] = await nft();
   const fmtNft = stdlib.bigNumberToNumber(rawNft);
+  console.log('NFT to get:', fmtNft);
 
   // opt-in to NFT/token
   await accUser.tokenAccept(fmtNft);

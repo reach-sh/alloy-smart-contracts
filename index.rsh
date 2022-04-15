@@ -3,7 +3,8 @@
 
 import { getNftCtc } from './utils.rsh';
 
-const NUM_OF_NFTS = 437;
+// 437
+const NUM_OF_NFTS = 20;
 const NFT_COST = 1;
 
 const dispenserI = {
@@ -53,7 +54,7 @@ export const machine = Reach.App(() => {
   ])
     .define(() => {
       // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
-      // const getRNum = (N, R) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
+      // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 
       // this would not compile when using thisConsensusTime() and thisConsensusSecs()
       // hence the "lastConsensus" things instead
@@ -69,6 +70,7 @@ export const machine = Reach.App(() => {
         }
         const rN = getRNum(rNum);
         const nonTakenLength = nftCtcs.length - toksTkn;
+        check(nonTakenLength > 0, 'require machine has NFTs');
         const index = rN % nonTakenLength;
         const maxIndex = nonTakenLength - 1;
         check(index <= loadedIndex, 'index is of a loaded ctc');
@@ -80,7 +82,7 @@ export const machine = Reach.App(() => {
       };
       const checkValidUsr = user => {
         const userCtc = cMap[user];
-        check(typeOf(userCtc) !== null, 'assume user has inserted token');
+        check(typeOf(userCtc) !== null, 'user has inserted token');
         const c = fromSome(userCtc, thisContract);
         chkCtcValid(c);
         return () => {
