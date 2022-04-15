@@ -16,9 +16,9 @@ export const machine = Reach.App(() => {
     ready: Fun([Contract], Null),
   });
   const api = API({
-    load: Fun([Contract], Contract),
+    load: Fun([Contract, UInt], Contract),
     insertToken: Fun([UInt], Contract),
-    turnCrank: Fun([], Tuple(Token, Contract)),
+    turnCrank: Fun([UInt], Tuple(Token, Contract)),
   });
 
   const NFT_CTCS = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
@@ -82,16 +82,17 @@ export const machine = Reach.App(() => {
         const c = fromSome(ctc, thisContract);
         chkCtcValid(c);
         check(newCtcArr.length == nftCtcs.length);
-        return () => [c, newCtcArr];
+        return () => [c, newCtcArr, rN];
       };
-      const checkValidUsr = user => {
+      const checkValidUsr = (user, rNum) => {
+        const rN = getRNum(rNum);
         const userCtc = cMap[user];
         check(typeOf(userCtc) !== null, 'user has inserted token');
         const c = fromSome(userCtc, thisContract);
         chkCtcValid(c);
         return () => {
           check(typeOf(c) == Contract);
-          return c;
+          return [c, rN];
         };
       };
     })
@@ -100,15 +101,16 @@ export const machine = Reach.App(() => {
     .paySpec([payToken])
     .api(
       api.load,
-      _ => {
+      (_, _) => {
         check(loadedIndex <= nftCtcs.length - 1);
       },
-      _ => handlePmt(0),
-      (contract, notify) => {
+      (_, _) => handlePmt(0),
+      (contract, rNum, notify) => {
+        const nR = getRNum(rNum);
         check(loadedIndex <= nftCtcs.length - 1);
         const newArr = nftCtcs.set(loadedIndex, Maybe(Contract).Some(contract));
         notify(contract);
-        return [newArr, R, toksTkn, loadedIndex + 1];
+        return [newArr, nR, toksTkn, loadedIndex + 1];
       }
     )
     .api(
@@ -118,25 +120,25 @@ export const machine = Reach.App(() => {
       },
       _ => handlePmt(NFT_COST),
       (rNum, notify) => {
-        const [ctc, newCtcArr] = checkCtc(rNum, this)();
+        const [ctc, newCtcArr, nR] = checkCtc(rNum, this)();
         cMap[this] = ctc;
         notify(ctc);
-        return [newCtcArr, R, toksTkn + 1, loadedIndex];
+        return [newCtcArr, nR, toksTkn + 1, loadedIndex];
       }
     )
     .api(
       api.turnCrank,
-      () => {
-        const _ = checkValidUsr(this);
+      rNum => {
+        const _ = checkValidUsr(this, rNum);
       },
-      () => handlePmt(0),
-      notify => {
-        const ctc = checkValidUsr(this)();
+      _ => handlePmt(0),
+      (rNum, notify) => {
+        const [ctc, nR] = checkValidUsr(this, rNum)();
         const dispenserCtc = remote(ctc, dispenserI);
         const nft = dispenserCtc.setOwner(this);
         delete cMap[this];
         notify([nft, ctc]);
-        return [nftCtcs, R, toksTkn, loadedIndex];
+        return [nftCtcs, nR, toksTkn, loadedIndex];
       }
     );
 
