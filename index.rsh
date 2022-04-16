@@ -184,9 +184,8 @@ export const machine = Reach.App(() => {
         const sRow = fromSome(row, defRow);
         const isRfull = sRow.loadedIndex == sRow.nftCtcs.length;
         const nLoaded = isRfull ? loadedRows + 1 : loadedRows;
-        const k = isRfull ? true : false;
         const nRows = rows.set(loadedRows, Maybe(RowN).Some(this));
-        notify(k);
+        notify(isRfull);
         return [R, toksTkn, nRows, nLoaded];
       }
     )
