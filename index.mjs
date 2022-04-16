@@ -70,7 +70,7 @@ const loadRow = async (machineAddr, info, amount) => {
     for (const ctc of nftCtcAdds) {
       const [row, rIndex] = await ctcMachine.a.loadRow(
         ctc,
-        stdlib.bigNumberify(2)
+        stdlib.bigNumberify(getRandomNum())
       );
       const fmtR = stdlib.bigNumberToNumber(row);
       const fmtRi = stdlib.bigNumberToNumber(rIndex);
