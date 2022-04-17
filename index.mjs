@@ -5,13 +5,13 @@ import * as dispenserBackend from './build/index.dispenser.mjs';
 const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
-const NUM_OF_NFTS = 10;
-const NUM_OF_ROWS = 3;
+const NUM_OF_NFTS = 2;
+const NUM_OF_ROWS = 10;
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);
 
-const getRandomNum = () => Math.floor(Math.random() * 20);
+const getRandomNum = () => Math.floor(Math.random() * (100 - 0 + 1) + 0);;
 
 // create the NFT's/tokens
 const createNFts = async (acc, amt) => {
@@ -78,7 +78,7 @@ const loadRow = async (machineAddr, info, amount) => {
     }
     const isRowLoaded = await ctcMachine.a.checkIfLoaded();
     if (isRowLoaded) {
-      console.log('')
+      console.log('');
       console.log('Successfully loaded Row!');
       console.log('');
     } else {
@@ -91,7 +91,7 @@ const loadRow = async (machineAddr, info, amount) => {
 const getTokBal = async (acc, tok) => {
   const balB = await stdlib.balanceOf(acc, tok);
   const balA = stdlib.bigNumberToNumber(balB);
-  return Promise.resolve(balA);
+  return balA;
 };
 
 // create users
@@ -174,7 +174,17 @@ const onAppDeploy = async () => {
   // create NFT's, NFT dispenser contracts, and deploy NFT dispenser contracts
   await loadRow(machineAddr, info, NUM_OF_ROWS);
 
-  const [nftCtc1, nft1] = await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+  await getNftForUser();
+
   process.exit(0);
 };
 
