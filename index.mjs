@@ -5,8 +5,8 @@ import * as dispenserBackend from './build/index.dispenser.mjs';
 const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
-const NUM_OF_NFTS = 4;
-const NUM_OF_ROWS = 3;
+const NUM_OF_NFTS = 5;
+const NUM_OF_ROWS = 5;
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);

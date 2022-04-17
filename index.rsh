@@ -2,8 +2,8 @@
 'use strict';
 
 // 437
-const NUM_OF_NFTS = 4;
-const NUM_OF_ROWS = 3;
+const NUM_OF_NFTS = 5;
+const NUM_OF_ROWS = 5;
 const NFT_COST = 1;
 
 const defNfts = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
@@ -87,6 +87,7 @@ export const machine = Reach.App(() => {
           const k = sz == 0 ? 0 : sz - 1;
           const ip = i % sz;
           const ctc = arr[ip];
+          check(isSome(ctc), 'arr item has data')
           const defCtc = Maybe(t).None();
           const newArr = Array.set(arr, ip, arr[k]);
           const nullEndArr = Array.set(newArr, k, defCtc);
@@ -132,11 +133,12 @@ export const machine = Reach.App(() => {
         const chkValidRow = rNum => {
           const rN = getRNum(rNum);
           check(loadedRows <= rows.length, 'has loaded rows');
-          const nonTakenLngth = rows.length - emptyRows;
+          const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
           const maxIndex = nonTakenLngth - 1;
           check(rowIndex <= maxIndex, 'row array bounds check');
           const [row, _] = getIfrmArr(rows, rowIndex, maxIndex, Address);
+          // const row = rows[rowIndex]
           check(isSome(row), 'check row exist');
           switch (row) {
             case None:
@@ -145,11 +147,11 @@ export const machine = Reach.App(() => {
                 nftContract: Maybe(Contract).None(),
                 row: Maybe(RowN).None(),
               };
-              return [d, Machine, rN, rows, emptyRows];
+              return [d, Machine, rN];
             case Some: {
               const pRow = rowMap[row];
-              // check(typeOf(pRow) !== null, 'check row contents exists');
-              // check(isSome(pRow), 'row is valid');
+              check(typeOf(pRow) !== null, 'check row contents exists');
+              check(isSome(pRow), 'row is valid');
               const pR = fromSome(pRow, defRow);
               check(
                 pR.rowToksTkn < pR.nftCtcs.length,
@@ -159,20 +161,15 @@ export const machine = Reach.App(() => {
                 nftContract: Maybe(Contract).None(),
                 row: Maybe(RowN).Some(row),
               };
-              const eRows =
-                pR.rowToksTkn + 1 == pR.nftCtcs.length
-                  ? emptyRows + 1
-                  : emptyRows;
-              return [d, row, rN, rows, eRows];
+              return [d, row, rN];
             }
           }
         };
         const chckValidCtc = (usr, rNum) => {
-          check(emptyRows < rows.length);
-          const rN = getRNum(rNum);
+          check(emptyRows < rows.length, 'no rows left');
           const u = uMap[usr];
           check(typeOf(u) !== null, 'user has not inserted token');
-          check(isSome(u));
+          check(isSome(u), 'there is uer data');
           const user = fromSome(u, defUsr);
           const uR = user.row;
           check(
@@ -190,6 +187,7 @@ export const machine = Reach.App(() => {
                   loadedCtcs <= nftCtcs.length,
                   'loaded nfts are in bounds'
                 );
+                const rN = getRNum(rNum);
                 check(rowToksTkn <= nftCtcs.length, 'nfts taken are in bounds');
                 const nonTakenLength = loadedCtcs - rowToksTkn;
                 const index = rN % nonTakenLength;
@@ -203,22 +201,20 @@ export const machine = Reach.App(() => {
                 );
                 check(isSome(slot), 'make sure nft is valid');
                 const sSlot = fromSome(slot, thisContract);
-                check(sSlot !== thisContract)
                 const arr = rowToksTkn + 1 == nftCtcs.length ? newArr : nftCtcs;
-                return [user, sSlot, arr, uR, rowForUsr];
+                const eRows = rowToksTkn + 1 == nftCtcs.length ? emptyRows + 1 : emptyRows
+                return [user, sSlot, arr, uR, rowForUsr, eRows];
               }
               case None: {
                 assert(true);
-                return [user, thisContract, defNfts, Machine, defRow];
+                return [user, thisContract, defNfts, Machine, defRow, emptyRows];
               }
             }
           };
         };
       })
       .invariant(balance() === 0 && balance(payToken) / NFT_COST == toksTkn)
-      .while(
-        toksTkn == 0 ? true : toksTkn < tokensLoaded && emptyRows < rows.length
-      )
+      .while(emptyRows < rows.length)
       .paySpec([payToken])
       .api(
         api.loadRow,
@@ -230,7 +226,7 @@ export const machine = Reach.App(() => {
           const nR = getRNum(rNum);
           const r = chkRow(this)();
           const nToksLoaded = updtRow(this, r, contract)();
-          notify([loadedRows, r.loadedCtcs + 1]);
+          notify([loadedRows + 1, r.loadedCtcs + 1]);
           return [
             nR,
             toksTkn,
@@ -244,7 +240,7 @@ export const machine = Reach.App(() => {
       .api(
         api.checkIfLoaded,
         () => {
-          const _ = chkLoad(this);
+          const _ = chkLoad(this)();
         },
         () => handlePmt(0),
         notify => {
@@ -260,10 +256,10 @@ export const machine = Reach.App(() => {
         },
         _ => handlePmt(NFT_COST),
         (rNum, notify) => {
-          const [rD, row, rN, nRows, eRows] = chkValidRow(rNum);
+          const [rD, row, rN] = chkValidRow(rNum);
           uMap[this] = rD;
           notify(row);
-          return [rN, toksTkn + 1, nRows, loadedRows, tokensLoaded, eRows];
+          return [rN, toksTkn + 1, rows, loadedRows, tokensLoaded, emptyRows];
         }
       )
       .api(
@@ -274,7 +270,7 @@ export const machine = Reach.App(() => {
         _ => handlePmt(0),
         (rNum, notify) => {
           const rN = getRNum(rNum);
-          const [user, slot, newArr, uR, rowForUsr] = chckValidCtc(
+          const [user, slot, newArr, uR, rowForUsr ,eRows] = chckValidCtc(
             this,
             rNum
           )();
@@ -288,7 +284,7 @@ export const machine = Reach.App(() => {
             rowToksTkn: rowForUsr.rowToksTkn + 1,
           };
           notify(slot);
-          return [rN, toksTkn, rows, loadedRows, tokensLoaded, emptyRows];
+          return [rN, toksTkn, rows, loadedRows, tokensLoaded, eRows];
         }
       )
       .api(
