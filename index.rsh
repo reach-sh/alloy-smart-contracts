@@ -63,10 +63,6 @@ export const machine = Reach.App(() => {
 
   const thisContract = getContract();
 
-  // const chkCtcValid = ctc => {
-  //   check(typeOf(ctc) == Contract && ctc !== thisContract, 'invalid contract');
-  // };
-
   const handlePmt = amt => [0, [amt, payToken]];
 
   const getRow = row => rowMap[row];
@@ -429,21 +425,20 @@ export const dispenser = Reach.App(() => {
 
   commit();
 
-  const [[owner], k2] = call(api.setOwner).assume(_ => {
+  const [[owner], k1] = call(api.setOwner).assume(_ => {
     check(this == mCtcAddr);
   });
   check(this == mCtcAddr);
-  k2(nft);
+  k1(nft);
 
   commit();
 
-  const [[], k3] = call(api.getNft).assume(() => {
+  const [[], k2] = call(api.getNft).assume(() => {
     check(this == owner);
   });
   check(this == owner);
   transfer(1, nft).to(this);
-  check(balance(nft) == 0);
-  k3(nft);
+  k2(nft);
 
   commit();
 });
