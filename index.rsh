@@ -6,24 +6,14 @@ const NUM_OF_NFTS = 3;
 const NUM_OF_ROWS = 3;
 const NFT_COST = 1;
 
-const defNfts = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
-
-const RowN = Address;
-const Row = Object({
-  nftCtcs: Array(Maybe(Contract), NUM_OF_NFTS),
-  loadedCtcs: UInt,
-  rowToksTkn: UInt,
-});
-const defRow = {
-  nftCtcs: defNfts,
-  loadedCtcs: 0,
-  rowToksTkn: 0,
-};
-
+// dispenser interface to be shared across both contracts
 const dispenserI = {
   setOwner: Fun([Address], Token),
   getNft: Fun([], Token),
 };
+
+// alias for row item
+const RowN = Address;
 
 export const machine = Reach.App(() => {
   setOptions({ connectors: [ALGO] });
@@ -47,7 +37,7 @@ export const machine = Reach.App(() => {
   });
   Machine.publish(payToken);
 
-  const uMap = new Map(
+  const Users = new Map(
     Object({
       nftContract: Maybe(Contract),
       row: Maybe(RowN),
@@ -58,19 +48,31 @@ export const machine = Reach.App(() => {
     row: Maybe(RowN).None(),
   };
 
-  const rowMap = new Map(Row);
-  const rPicker = Array.replicate(NUM_OF_ROWS, Maybe(Address).None());
+  const Row = Object({
+    nftCtcs: Array(Maybe(Contract), NUM_OF_NFTS),
+    loadedCtcs: UInt,
+    rowToksTkn: UInt,
+  });
+  const Rows = new Map(Row);
+  const defNfts = Array.replicate(NUM_OF_NFTS, Maybe(Contract).None());
+  const defRow = {
+    nftCtcs: defNfts,
+    loadedCtcs: 0,
+    rowToksTkn: 0,
+  };
+
+  const rowPicker = Array.replicate(NUM_OF_ROWS, Maybe(Address).None());
 
   const thisContract = getContract();
 
   const handlePmt = amt => [0, [amt, payToken]];
 
-  const getRow = row => rowMap[row];
+  const getRow = row => Rows[row];
 
   Machine.interact.ready(thisContract);
 
   const [R, toksTkn, rows, loadedRows, tokensLoaded, emptyRows, createdRows] =
-    parallelReduce([digest(0), 0, rPicker, 0, 0, 0, 0])
+    parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, 0])
       .define(() => {
         // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
         // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
@@ -82,7 +84,7 @@ export const machine = Reach.App(() => {
         const chkRowCreate = user => {
           check(createdRows < rows.length);
           check(isNone(rows[createdRows]), 'check row exist');
-          check(isNone(rowMap[user]), 'check row exist');
+          check(isNone(Rows[user]), 'check row exist');
           const nRows = rows.set(createdRows, Maybe(Address).Some(user));
           check(isSome(nRows[createdRows]), 'check row was created');
           return nRows;
@@ -98,7 +100,7 @@ export const machine = Reach.App(() => {
           return [item, nullEndArr];
         };
         const chkRow = user => {
-          check(isSome(rowMap[user]), 'check row can be loaded');
+          check(isSome(Rows[user]), 'check row can be loaded');
           check(loadedRows <= rows.length);
           const row = getRow(user);
           const sRow = fromSome(row, defRow);
@@ -113,8 +115,8 @@ export const machine = Reach.App(() => {
             r.loadedCtcs + 1 <= newArr.length,
             'make sure row does not exceed bounds'
           );
-          check(isSome(rowMap[user]), 'check row can be updated');
-          rowMap[user] = {
+          check(isSome(Rows[user]), 'check row can be updated');
+          Rows[user] = {
             nftCtcs: newArr,
             loadedCtcs: r.loadedCtcs + 1,
             rowToksTkn: 0,
@@ -122,7 +124,7 @@ export const machine = Reach.App(() => {
           return () => r.loadedCtcs + 1;
         };
         const chkLoad = user => {
-          check(isSome(rowMap[user]), 'check row exist');
+          check(isSome(Rows[user]), 'check row exist');
           check(
             loadedRows < rows.length,
             'check loaded rows are less than length'
@@ -158,7 +160,7 @@ export const machine = Reach.App(() => {
               };
               return [d, Machine, rN];
             case Some: {
-              const pRow = rowMap[row];
+              const pRow = Rows[row];
               check(typeOf(pRow) !== null, 'check row contents exists');
               check(isSome(pRow), 'row is valid');
               const pR = fromSome(pRow, defRow);
@@ -175,7 +177,7 @@ export const machine = Reach.App(() => {
           }
         };
         const chkTurnCrank = (usr, rNum) => {
-          const u = uMap[usr];
+          const u = Users[usr];
           check(typeOf(u) !== null, 'user has not inserted token');
           check(isSome(u), 'there is uer data');
           const user = fromSome(u, defUsr);
@@ -187,7 +189,7 @@ export const machine = Reach.App(() => {
           return () => {
             switch (uR) {
               case Some: {
-                const rData = rowMap[uR];
+                const rData = Rows[uR];
                 check(isSome(rData), 'check row is valid');
                 const rowForUsr = fromSome(rData, defRow);
                 const { nftCtcs, rowToksTkn, loadedCtcs } = rowForUsr;
@@ -231,7 +233,7 @@ export const machine = Reach.App(() => {
           };
         };
         const chkFinalCrank = u => {
-          const user = fromSome(uMap[u], defUsr);
+          const user = fromSome(Users[u], defUsr);
           check(isSome(user.nftContract));
           const nCtc = fromSome(user.nftContract, thisContract);
           check(nCtc !== thisContract);
@@ -241,7 +243,7 @@ export const machine = Reach.App(() => {
       .invariant(
         balance() === 0 &&
           balance(payToken) / NFT_COST == toksTkn &&
-          rowMap.size() == createdRows
+          Rows.size() == createdRows
       )
       .while(emptyRows < rows.length)
       .paySpec([payToken])
@@ -253,8 +255,8 @@ export const machine = Reach.App(() => {
         () => handlePmt(0),
         notify => {
           const nRows = chkRowCreate(this);
-          rowMap[this] = defRow;
-          check(isSome(rowMap[this]), 'check row created');
+          Rows[this] = defRow;
+          check(isSome(Rows[this]), 'check row created');
           notify(this);
           return [
             R,
@@ -317,7 +319,7 @@ export const machine = Reach.App(() => {
         _ => handlePmt(NFT_COST),
         (rNum, notify) => {
           const [rD, row, rN] = chkInsertTkn(rNum);
-          uMap[this] = rD;
+          Users[this] = rD;
           notify(row);
           return [
             rN,
@@ -342,11 +344,11 @@ export const machine = Reach.App(() => {
             this,
             rNum
           )();
-          uMap[this] = {
+          Users[this] = {
             row: user.row,
             nftContract: Maybe(Contract).Some(slot),
           };
-          rowMap[uR] = {
+          Rows[uR] = {
             ...rowForUsr,
             nftCtcs: newArr,
             rowToksTkn: rowForUsr.rowToksTkn + 1,
@@ -374,7 +376,7 @@ export const machine = Reach.App(() => {
           const rN = getRNum(rNum);
           const dispenserCtc = remote(ctc, dispenserI);
           const nft = dispenserCtc.setOwner(this);
-          delete uMap[this];
+          delete Users[this];
           notify(nft);
           return [
             rN,
