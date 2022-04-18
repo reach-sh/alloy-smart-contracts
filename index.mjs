@@ -28,7 +28,6 @@ const createNftCtcs = (acc, nfts) =>
     ctc: acc.contract(dispenserBackend),
   }));
 
-// TODO: clean this function up
 // deploy NFT contracts to consensus network
 const deployNftCtcs = async (nftHs, machineAddr) => {
   const ctcAddress = [];
