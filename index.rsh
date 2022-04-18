@@ -136,12 +136,13 @@ export const machine = Reach.App(() => {
           check(loadedRows <= rows.length, 'has loaded rows');
           const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
-          const maxIndex = nonTakenLngth - 1;
+          const maxIndex = nonTakenLngth;
           check(
             rowIndex >= 0 && rowIndex <= maxIndex,
             'row array bounds check'
           );
           const [row, _] = getIfrmArr(rows, rowIndex, maxIndex, Address);
+          // const row = rows[1]
           check(isSome(row), 'check row exist');
           switch (row) {
             case None:
@@ -190,11 +191,11 @@ export const machine = Reach.App(() => {
                   'loaded nfts are in bounds'
                 );
                 const rN = getRNum(rNum);
-                check(rowToksTkn <= nftCtcs.length, 'nfts taken are in bounds');
+                check(rowToksTkn < nftCtcs.length, 'nfts taken are in bounds');
                 const nonTakenLength = loadedCtcs - rowToksTkn;
                 const index = rN % nonTakenLength;
-                const maxIndex = nonTakenLength - 1;
-                check(index <= maxIndex, 'index is of a loaded ctc');
+                const maxIndex = nonTakenLength;
+                check(index >= 0 && index <= maxIndex, 'index is of a loaded ctc');
                 const [slot, newArr] = getIfrmArr(
                   nftCtcs,
                   index,
