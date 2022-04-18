@@ -30,26 +30,23 @@ const createNftCtcs = (acc, nfts) =>
 
 // TODO: clean this function up
 // deploy NFT contracts to consensus network
-const deployNftCtcs = (nftHs, machineAddr) => {
-  return new Promise((resolve, reject) => {
-    let ctcAddress = [];
-    let i = 0;
-    const deployCtc = () => {
-      if (i === nftHs.length) {
-        resolve(ctcAddress);
-        return;
-      }
-      nftHs[i].ctc.p.Dispenser({
+const deployNftCtcs = async (nftHs, machineAddr) => {
+  const ctcAddress = [];
+  const deploy = nft =>
+    new Promise((res, rej) => {
+      nft.ctc.p.Dispenser({
         ready: ctc => {
           ctcAddress.push(ctc);
-          deployCtc(i++);
+          res();
         },
-        nft: nftHs[i].nft.id,
+        nft: nft.nft.id,
         mCtcAddr: machineAddr,
       });
-    };
-    deployCtc();
-  });
+    });
+  for (const nftCtc of nftHs) {
+    await deploy(nftCtc);
+  }
+  return ctcAddress;
 };
 
 // load NFT contracts in machine contract
