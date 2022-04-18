@@ -11,7 +11,10 @@ const NUM_OF_ROWS = 3;
 // starting balance
 const bal = stdlib.parseCurrency(10000);
 
-const getRandomNum = () => Math.floor(Math.random() * (100 - 0 + 1) + 0);
+const getRandomNum = (max = 100) => Math.floor(Math.random() * max);
+const getRandomBigInt = () => stdlib.bigNumberify(getRandomNum());
+const fmtNum = (n) => stdlib.bigNumberToNumber(n)
+const fmtAddr = (addr) => stdlib.formatAddress(addr)
 
 // create the NFT's/tokens
 const createNFts = async (acc, amt) => {
@@ -56,7 +59,7 @@ const loadRow = async (machineAddr, info, amount) => {
     console.log('');
     console.log('-- Starting row creations --');
     const row = await ctcMachine.a.createRow();
-    console.log('Row created!', stdlib.formatAddress(row));
+    console.log('Row created!', fmtAddr(row));
     console.log('');
     console.log('-- Starting row loading --');
     console.log('');
@@ -68,12 +71,9 @@ const loadRow = async (machineAddr, info, amount) => {
     const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
     console.log('Loading slots into row(s)...');
     for (const ctc of nftCtcAdds) {
-      const [row, rIndex] = await ctcMachine.a.loadRow(
-        ctc,
-        stdlib.bigNumberify(getRandomNum())
-      );
-      const fmtR = stdlib.bigNumberToNumber(row);
-      const fmtRi = stdlib.bigNumberToNumber(rIndex);
+      const [row, rIndex] = await ctcMachine.a.loadRow(ctc, getRandomBigInt());
+      const fmtR = fmtNum(row);
+      const fmtRi = fmtNum(rIndex);
       console.log(`Loaded slot ${fmtRi} ar row ${fmtR}!`);
     }
     const isRowLoaded = await ctcMachine.a.checkIfLoaded();
@@ -90,7 +90,7 @@ const loadRow = async (machineAddr, info, amount) => {
 // helper for getting formatted token balance
 const getTokBal = async (acc, tok) => {
   const balB = await stdlib.balanceOf(acc, tok);
-  const balA = stdlib.bigNumberToNumber(balB);
+  const balA = fmtNum(balB);
   return balA;
 };
 
@@ -106,7 +106,7 @@ const { id: payTokenId } = await launchToken(
   'RTYT'
 );
 
-const getNftForUser = async (amt, existingAcc, nftCtc) => {
+const getNft = async (amt = 1, existingAcc, nftCtc) => {
   const info = await ctcMachine.getInfo();
   for (let i = 0; i < amt; i++) {
     const acc = existingAcc || (await stdlib.newTestAccount(bal));
@@ -117,14 +117,12 @@ const getNftForUser = async (amt, existingAcc, nftCtc) => {
     const { insertToken, turnCrank, finishTurnCrank } = ctcUser.a;
 
     // assign the user an NFT via an NFT contract
-    const rNum = getRandomNum();
-    const row = await insertToken(stdlib.bigNumberify(rNum));
-    const fmtRow = stdlib.formatAddress(row);
+    const row = await insertToken(getRandomBigInt());
+    const fmtRow = fmtAddr(row);
     console.log('Your row id:', fmtRow);
 
-    const rNum1 = getRandomNum();
-    const nCtc = await turnCrank(stdlib.bigNumberify(rNum1));
-    const dCtc = stdlib.bigNumberToNumber(nCtc);
+    const nCtc = await turnCrank(getRandomBigInt());
+    const dCtc = fmtNum(nCtc);
     console.log('Your dispenser contract is:', dCtc);
 
     const ctcDispenser = acc.contract(dispenserBackend, nftCtc || dCtc);
@@ -132,7 +130,7 @@ const getNftForUser = async (amt, existingAcc, nftCtc) => {
     // get the nft from the user's dispenser contract
     const { nft } = ctcDispenser.v;
     const [_, rawNft] = await nft();
-    const fmtNft = stdlib.bigNumberToNumber(rawNft);
+    const fmtNft = fmtNum(rawNft);
     console.log('NFT to get:', fmtNft);
 
     // opt-in to NFT/token
@@ -145,9 +143,8 @@ const getNftForUser = async (amt, existingAcc, nftCtc) => {
     console.log('balance of NFT before', nfBalA);
 
     // // set the owner of the NFT contract to the uer so they can get it
-    const rNum2 = getRandomNum();
-    const n = await finishTurnCrank(rNum2);
-    const fmtN = stdlib.bigNumberToNumber(n);
+    const n = await finishTurnCrank(getRandomBigInt());
+    const fmtN = fmtNum(n);
     console.log(`Can now get nft ${fmtN} from contract ${dCtc}.`);
 
     // // get NFT
@@ -168,13 +165,13 @@ const onAppDeploy = async () => {
 
   // get machine contract address
   const rawMachineAddr = await ctcMachine.getContractAddress();
-  const machineAddr = stdlib.formatAddress(rawMachineAddr);
+  const machineAddr = fmtAddr(rawMachineAddr);
 
   // create NFT's, NFT dispenser contracts, and deploy NFT dispenser contracts
   await loadRow(machineAddr, info, NUM_OF_ROWS);
 
   // get NFT's
-  await getNftForUser(3);
+  await getNft(3);
 
   process.exit(0);
 };
