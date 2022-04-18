@@ -5,13 +5,13 @@ import * as dispenserBackend from './build/index.dispenser.mjs';
 const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
-const NUM_OF_NFTS = 5;
-const NUM_OF_ROWS = 5;
+const NUM_OF_NFTS = 3;
+const NUM_OF_ROWS = 3;
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);
 
-const getRandomNum = () => Math.floor(Math.random() * (100 - 0 + 1) + 0);;
+const getRandomNum = () => Math.floor(Math.random() * (100 - 0 + 1) + 0);
 
 // create the NFT's/tokens
 const createNFts = async (acc, amt) => {
@@ -58,8 +58,12 @@ const loadRow = async (machineAddr, info, amount) => {
     const accAltMachine = await stdlib.newTestAccount(bal);
     const ctcMachine = accAltMachine.contract(machineBackend, info);
     console.log('');
-    console.log('-- Starting row loading --');
+    console.log('-- Starting row creations --');
+    const row = await ctcMachine.a.createRow();
+    console.log('Row created!', stdlib.formatAddress(row))
     console.log('');
+    console.log('-- Starting row loading --');
+    console.log('')
     console.log('creating NFTS...');
     const nfts = await createNFts(accAltMachine, NUM_OF_NFTS);
     console.log('creating NFT CTCs...');
