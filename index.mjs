@@ -13,8 +13,8 @@ const bal = stdlib.parseCurrency(10000);
 
 const getRandomNum = (max = 100) => Math.floor(Math.random() * max);
 const getRandomBigInt = () => stdlib.bigNumberify(getRandomNum());
-const fmtNum = (n) => stdlib.bigNumberToNumber(n)
-const fmtAddr = (addr) => stdlib.formatAddress(addr)
+const fmtNum = n => stdlib.bigNumberToNumber(n);
+const fmtAddr = addr => stdlib.formatAddress(addr);
 
 // create the NFT's/tokens
 const createNFts = async (acc, amt) => {
@@ -50,6 +50,11 @@ const deployNftCtcs = async (nftHs, machineAddr) => {
   }
   return ctcAddress;
 };
+
+// create users
+const accMachine = await stdlib.newTestAccount(bal);
+// create machine contract
+const ctcMachine = accMachine.contract(machineBackend);
 
 // load NFT contracts in machine contract
 const loadRow = async (machineAddr, info, amount) => {
@@ -93,11 +98,6 @@ const getTokBal = async (acc, tok) => {
   const balA = fmtNum(balB);
   return balA;
 };
-
-// create users
-const accMachine = await stdlib.newTestAccount(bal);
-// create machine contract
-const ctcMachine = accMachine.contract(machineBackend);
 
 // create pay token
 const { id: payTokenId } = await launchToken(

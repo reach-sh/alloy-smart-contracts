@@ -71,7 +71,7 @@ export const machine = Reach.App(() => {
 
   Machine.interact.ready(thisContract);
 
-  const [R, toksTkn, rows, loadedRows, tokensLoaded, emptyRows, createdRows] =
+  const [R, totToksTkn, rowArr, loadedRows, totToksLoaded, emptyRows, createdRows] =
     parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, 0])
       .define(() => {
         // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
@@ -82,10 +82,10 @@ export const machine = Reach.App(() => {
         const getRNum = N =>
           digest(N, R, lastConsensusTime(), lastConsensusSecs());
         const chkRowCreate = user => {
-          check(createdRows < rows.length);
-          check(isNone(rows[createdRows]), 'check row exist');
+          check(createdRows < rowArr.length);
+          check(isNone(rowArr[createdRows]), 'check row exist');
           check(isNone(Rows[user]), 'check row exist');
-          const nRows = rows.set(createdRows, Maybe(Address).Some(user));
+          const nRows = rowArr.set(createdRows, Maybe(Address).Some(user));
           check(isSome(nRows[createdRows]), 'check row was created');
           return nRows;
         };
@@ -101,7 +101,7 @@ export const machine = Reach.App(() => {
         };
         const chkRow = user => {
           check(isSome(Rows[user]), 'check row can be loaded');
-          check(loadedRows <= rows.length);
+          check(loadedRows <= rowArr.length);
           const row = getRow(user);
           const sRow = fromSome(row, defRow);
           check(sRow.loadedCtcs < sRow.nftCtcs.length);
@@ -126,21 +126,21 @@ export const machine = Reach.App(() => {
         const chkLoad = user => {
           check(isSome(Rows[user]), 'check row exist');
           check(
-            loadedRows < rows.length,
-            'check loaded rows are less than length'
+            loadedRows < rowArr.length,
+            'check loaded rowArr are less than length'
           );
           return () => {
             const row = getRow(user);
             const sRow = fromSome(row, defRow);
             const isRfull = sRow.loadedCtcs == sRow.nftCtcs.length;
             const nLoaded = isRfull ? loadedRows + 1 : loadedRows;
-            const nRows = rows.set(loadedRows, Maybe(RowN).Some(user));
+            const nRows = rowArr.set(loadedRows, Maybe(RowN).Some(user));
             return [nLoaded, nRows, isRfull];
           };
         };
         const chkInsertTkn = rNum => {
           const rN = getRNum(rNum);
-          check(loadedRows <= rows.length, 'has loaded rows');
+          check(loadedRows <= rowArr.length, 'has loaded rowArr');
           const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
           const maxIndex = nonTakenLngth;
@@ -148,8 +148,8 @@ export const machine = Reach.App(() => {
             rowIndex >= 0 && rowIndex <= maxIndex,
             'row array bounds check'
           );
-          const [row, _] = getIfrmArr(rows, rowIndex, maxIndex, Address);
-          // const row = rows[1];
+          const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
+          // const row = rowArr[1];
           check(isSome(row), 'check row exist');
           switch (row) {
             case None:
@@ -242,10 +242,10 @@ export const machine = Reach.App(() => {
       })
       .invariant(
         balance() === 0 &&
-          balance(payToken) / NFT_COST == toksTkn &&
+          balance(payToken) / NFT_COST == totToksTkn &&
           Rows.size() == createdRows
       )
-      .while(emptyRows < rows.length)
+      .while(emptyRows < rowArr.length)
       .paySpec([payToken])
       .api(
         api.createRow,
@@ -260,10 +260,10 @@ export const machine = Reach.App(() => {
           notify(this);
           return [
             R,
-            toksTkn,
+            totToksTkn,
             nRows,
             loadedRows,
-            tokensLoaded,
+            totToksLoaded,
             emptyRows,
             createdRows + 1,
           ];
@@ -282,10 +282,10 @@ export const machine = Reach.App(() => {
           notify([loadedRows + 1, r.loadedCtcs + 1]);
           return [
             nR,
-            toksTkn,
-            rows,
+            totToksTkn,
+            rowArr,
             loadedRows,
-            tokensLoaded + nToksLoaded,
+            totToksLoaded + nToksLoaded,
             emptyRows,
             createdRows,
           ];
@@ -302,10 +302,10 @@ export const machine = Reach.App(() => {
           notify(isRfull);
           return [
             R,
-            toksTkn,
+            totToksTkn,
             nRows,
             nLoaded,
-            tokensLoaded,
+            totToksLoaded,
             emptyRows,
             createdRows,
           ];
@@ -323,10 +323,10 @@ export const machine = Reach.App(() => {
           notify(row);
           return [
             rN,
-            toksTkn + 1,
-            rows,
+            totToksTkn + 1,
+            rowArr,
             loadedRows,
-            tokensLoaded,
+            totToksLoaded,
             emptyRows,
             createdRows,
           ];
@@ -356,10 +356,10 @@ export const machine = Reach.App(() => {
           notify(slot);
           return [
             rN,
-            toksTkn,
-            rows,
+            totToksTkn,
+            rowArr,
             loadedRows,
-            tokensLoaded,
+            totToksLoaded,
             eRows,
             createdRows,
           ];
@@ -380,10 +380,10 @@ export const machine = Reach.App(() => {
           notify(nft);
           return [
             rN,
-            toksTkn,
-            rows,
+            totToksTkn,
+            rowArr,
             loadedRows,
-            tokensLoaded,
+            totToksLoaded,
             emptyRows,
             createdRows,
           ];
