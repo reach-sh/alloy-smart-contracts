@@ -23,7 +23,7 @@ export const machine = Reach.App(() => {
     ready: Fun([Contract], Null),
   });
   const api = API({
-    createRow: Fun([], Address),
+    createRow: Fun([], Tuple(Address, UInt)),
     loadRow: Fun([Contract, UInt], Tuple(UInt, UInt)),
     checkIfLoaded: Fun([], Bool),
     insertToken: Fun([UInt], RowN),
@@ -82,7 +82,7 @@ export const machine = Reach.App(() => {
         const getRNum = N =>
           digest(N, R, lastConsensusTime(), lastConsensusSecs());
         const chkRowCreate = user => {
-          check(createdRows < rowArr.length);
+          check(createdRows < rowArr.length, 'too many rows');
           check(isNone(rowArr[createdRows]), 'check row exist');
           check(isNone(Rows[user]), 'check row exist');
           const nRows = rowArr.set(createdRows, Maybe(Address).Some(user));
@@ -257,7 +257,7 @@ export const machine = Reach.App(() => {
           const nRows = chkRowCreate(this);
           Rows[this] = defRow;
           check(isSome(Rows[this]), 'check row created');
-          notify(this);
+          notify([this, createdRows + 1]);
           return [
             R,
             totToksTkn,
