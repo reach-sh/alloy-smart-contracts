@@ -6,7 +6,7 @@ const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
 const NUM_OF_NFTS = 3;
-const NUM_OF_ROWS = 3;
+const NUM_OF_ROWS = 2;
 
 // starting balance
 const bal = stdlib.parseCurrency(10000);
@@ -63,7 +63,7 @@ const loadRow = async (machineAddr, info, amount) => {
     const ctcMachine = accAltMachine.contract(machineBackend, info);
     console.log('');
     console.log('-- Starting row creations --');
-    const row = await ctcMachine.a.createRow();
+    const [row, numOfRows] = await ctcMachine.a.createRow();
     console.log('Row created!', fmtAddr(row));
     console.log('');
     console.log('-- Starting row loading --');
@@ -114,16 +114,25 @@ const getNft = async (amt = 1, existingAcc, nftCtc) => {
     await stdlib.transfer(accMachine, acc, 100, payTokenId);
 
     const ctcUser = acc.contract(machineBackend, info);
-    const { insertToken, turnCrank, finishTurnCrank } = ctcUser.a;
+    const {
+      insertToken,
+      turnCrank,
+      finishTurnCrank,
+      setOwner: assignNft,
+    } = ctcUser.a;
 
     // assign the user an NFT via an NFT contract
-    const row = await insertToken(getRandomBigInt());
-    const fmtRow = fmtAddr(row);
-    console.log('Your row id:', fmtRow);
+    const rowIndex = await insertToken(getRandomBigInt());
+    const fmtRowI = fmtNum(rowIndex);
+    console.log('Your row index:', fmtRowI);
 
-    const nCtc = await turnCrank(getRandomBigInt());
-    const dCtc = fmtNum(nCtc);
-    console.log('Your dispenser contract is:', dCtc);
+    const row = await turnCrank(getRandomBigInt());
+    const fmtRow = fmtAddr(row);
+    console.log('Your row is:', fmtRow);
+
+    const dCtc = await finishTurnCrank(getRandomBigInt());
+    const fmtN = fmtNum(dCtc);
+    console.log('Your dispenser contract is:', fmtN);
 
     const ctcDispenser = acc.contract(dispenserBackend, nftCtc || dCtc);
 
@@ -142,10 +151,9 @@ const getNft = async (amt = 1, existingAcc, nftCtc) => {
     console.log('balance of TYT Token before', tytBalA);
     console.log('balance of NFT before', nfBalA);
 
+    const t = await assignNft()
+
     // // set the owner of the NFT contract to the uer so they can get it
-    const n = await finishTurnCrank(getRandomBigInt());
-    const fmtN = fmtNum(n);
-    console.log(`Can now get nft ${fmtN} from contract ${dCtc}.`);
 
     // // get NFT
     const usrCtcDispenser = acc.contract(dispenserBackend, dCtc);
@@ -171,7 +179,7 @@ const onAppDeploy = async () => {
   await loadRow(machineAddr, info, NUM_OF_ROWS);
 
   // get NFT's
-  await getNft(3);
+  await getNft(10);
 
   process.exit(0);
 };
