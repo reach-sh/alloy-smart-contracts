@@ -3,7 +3,6 @@
 
 const NFT_COST = 1;
 const NUM_OF_ROWS = 3;
-// 437
 const NUM_OF_ROW_ITEMS = 3;
 
 // dispenser interface to be shared across both contracts
@@ -31,6 +30,10 @@ export const machine = Reach.App(() => {
     finishTurnCrank: Fun([UInt], Contract),
     setOwner: Fun([], Null),
   });
+  const view = View({
+    numOfRows: UInt,
+    numOfSlots: UInt
+  })
   init();
 
   Machine.only(() => {
@@ -71,6 +74,10 @@ export const machine = Reach.App(() => {
   const handlePmt = amt => [0, [amt, payToken]];
 
   const getRow = row => Rows[row];
+
+  // set views
+  view.numOfRows.set(NUM_OF_ROWS);
+  view.numOfSlots.set(NUM_OF_ROW_ITEMS);
 
   Machine.interact.ready(thisContract);
 
