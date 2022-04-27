@@ -1,6 +1,5 @@
 import { loadStdlib } from '@reach-sh/stdlib';
-import * as machineBackend from '../build/index.machine.mjs';
-import * as dispenserBackend from '../build/index.dispenser.mjs';
+import * as machineBackend from './build/index.machine.mjs';
 import { bal, fmtAddr, fmtNum } from './index.mjs';
 
 const stdlib = loadStdlib('ALGO-devnet');
@@ -55,13 +54,21 @@ const chkScenerio__ = async (lab, go, opts = {}) => {
   const machineAddr = fmtAddr(rawMachineAddr);
   const mCtcInfo = await ctcMachine.getInfo();
   const x = { machineAddr, mCtcInfo, payTokenId, accMachine, v };
-  const asserts = { equals: chk, error: chkErr };
+  const asserts = { equals: chk, error: chkErr, isTrue };
   await go(asserts, x, lab);
 };
 
 export const describe = async (lab_in, go, opts = {}) => {
   tests++;
   jobs.push(() => chkScenerio__(lab_in, go, opts));
+};
+
+export const isTrue = (id, assertion) => {
+  if (assertion && LOUD) {
+    console.log('SUCC', { id, assertion });
+  } else {
+    failedTests.push(id);
+  }
 };
 
 export const chk = (id, actual, expected, xtra = {}) => {
@@ -124,7 +131,7 @@ export const startTests = async () => {
   }
   if (failedTests.length === 0) {
     console.log('');
-    console.log('✅ All test passed!✅');
+    console.log(`✅ ${tests} out of ${tests} tests passed!✅`);
     console.log('');
   } else {
     console.log('');
