@@ -1,7 +1,7 @@
 'reach 0.1';
 'use strict';
 
-const NFT_COST = 1;
+const NFT_COST = 1 * 1000000;
 const NUM_OF_ROWS = 3;
 const NUM_OF_ROW_ITEMS = 3;
 
@@ -32,8 +32,28 @@ export const machine = Reach.App(() => {
   });
   const view = View({
     numOfRows: UInt,
-    numOfSlots: UInt
-  })
+    numOfSlots: UInt,
+    loadedRows: UInt,
+    totalToksTaken: UInt,
+    totalToksLoaded: UInt,
+    createdRows: UInt,
+    getUser: Fun(
+      [Address],
+      Object({
+        nftContract: Maybe(Contract),
+        rowIndex: Maybe(UInt),
+        row: Maybe(RowN),
+      })
+    ),
+    getRow: Fun(
+      [Address],
+      Object({
+        nftCtcs: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
+        loadedCtcs: UInt,
+        rowToksTkn: UInt,
+      })
+    ),
+  });
   init();
 
   Machine.only(() => {
@@ -78,6 +98,8 @@ export const machine = Reach.App(() => {
   // set views
   view.numOfRows.set(NUM_OF_ROWS);
   view.numOfSlots.set(NUM_OF_ROW_ITEMS);
+  view.getUser.set(u => fromSome(Users[u], defUsr));
+  view.getRow.set(u => fromSome(Rows[u], defRow));
 
   Machine.interact.ready(thisContract);
 
@@ -91,6 +113,10 @@ export const machine = Reach.App(() => {
     createdRows,
   ] = parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, 0])
     .define(() => {
+      view.loadedRows.set(loadedRows);
+      view.totalToksTaken.set(totToksTkn);
+      view.totalToksLoaded.set(totToksLoaded);
+      view.createdRows.set(createdRows);
       // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
       // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 
@@ -158,7 +184,8 @@ export const machine = Reach.App(() => {
       };
       const chkInsertTkn = (rNum, user) => {
         const rN = getRNum(rNum);
-        check(isNone(Users[user]), 'user has inserted token')
+        check(isNone(Users[user]), 'user has inserted token');
+        check(loadedRows > 0, 'at least one row loaded');
         check(loadedRows <= rowArr.length, 'has loaded rowArr');
         const nonTakenLngth = loadedRows - emptyRows;
         const rowIndex = rN % nonTakenLngth;
@@ -220,7 +247,7 @@ export const machine = Reach.App(() => {
         check(emptyRows <= rowArr.length, 'empty rows in bounds');
         const rowData = Rows[fromSome(user.row, Machine)];
         check(fromSome(user.rowIndex, 999) < rowArr.length);
-        check(isSome(rowData), '44');
+        check(isSome(rowData), 'row has data');
         const sRowData = fromSome(rowData, defRow);
         const { rowToksTkn, nftCtcs } = sRowData;
         const rN = getRNum(rNum);
@@ -407,6 +434,7 @@ export const machine = Reach.App(() => {
         const dispenserCtc = remote(ctc, dispenserI);
         const nft = dispenserCtc.setOwner(this);
         check(typeOf(nft) !== null);
+        delete Users[this];
         k(null);
         return [
           R,

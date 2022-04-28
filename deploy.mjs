@@ -76,7 +76,7 @@ const deployNftCtcs = async (nftHs, machineAddr) => {
   return ctcAddress;
 };
 
-const loadNft = async (info, machineAddr) => {
+const loadRow_ = async (info, machineAddr) => {
   const mnemonic = await ask.ask(
     'Please paste the mnemonic of a row owner account:'
   );
@@ -136,15 +136,15 @@ if (existingMachine) {
     'Please enter the machine contract address (This will be an account address like FQWWCUXF2U4BROTZUQQE...)'
   );
   if (shouldLoadRow) {
-    const isRowLoaded = await loadNft(fmtCtcInfo, machineAddress);
+    const isRowLoaded = await loadRow_(fmtCtcInfo, machineAddress);
     if (isRowLoaded) console.log('Row Loaded Successfully!');
-    process.exit(0)
+    process.exit(0);
   } else {
     process.exit(0);
   }
 } else {
+  console.log('')
   console.log('OK. We will create a new machine. Please follow the promps.');
-  console.log('');
 }
 
 const mnemonic = await ask.ask('Please paste your mnemonic:');
@@ -153,23 +153,32 @@ const fmtMnemonic = mnemonic.replace(/,/g, '');
 const accMachine = await stdlib.newAccountFromMnemonic(fmtMnemonic);
 const ctcMachine = accMachine.contract(machineBackend);
 
-// create pay token
-console.log('');
-console.log('Launching pay token...');
-const { id: payTokenId } = await launchToken(
-  accMachine,
-  'Reach Thank You',
-  'RTYT'
+const willProvidePayToken = await ask.ask(
+  'Do you want to provide your own pay token?',
+  ask.yesno
 );
-const tokenId = fmtNum(payTokenId);
-
+let payTokenId;
+if (willProvidePayToken) {
+  const ePayTokenId = await ask.ask('Please paste desired pay token id:');
+  payTokenId = Number(ePayTokenId);
+} else {
+  // create pay token
+  console.log('');
+  console.log('Launching pay token...');
+  const { id: nPayTokenId } = await launchToken(
+    accMachine,
+    'Reach Thank You',
+    'RTYT'
+  );
+  payTokenId = fmtNum(nPayTokenId);
+}
 // deploy contract
 let maxNumberOfRows;
 let maxNumberOfRowSlots;
 console.log('Deploying machine contract...');
 try {
   await ctcMachine.p.Machine({
-    payToken: payTokenId,
+    payToken: stdlib.bigNumberify(payTokenId),
     ready: x => {
       throw { x };
     },
@@ -184,7 +193,7 @@ try {
       numOfSlots(),
     ]);
     const fmtRowNum = fmtNum(rawRowNum[1]);
-    const fmtSlotNum = fmtNum(rawRowNum[1]);
+    const fmtSlotNum = fmtNum(rawSlotNum[1]);
     maxNumberOfRows = fmtRowNum;
     maxNumberOfRowSlots = fmtSlotNum;
     console.log('');
@@ -201,7 +210,7 @@ const machineAddr = fmtAddr(rawMachineAddr);
 
 console.log('');
 console.log('*******************************************');
-console.log('Pay token id:', tokenId);
+console.log('Pay token id:', payTokenId);
 console.log('Machine contract info:', fmtNum(mCtcInfo));
 console.log('Machine contract address:', machineAddr);
 console.log('*******************************************');
@@ -226,6 +235,12 @@ let createdRows = 0;
 while (createdRows < howManyRows) {
   await createRow(mCtcInfo);
   createdRows++;
+}
+const shouldLoadRow = await ask.ask('Do you want to load a row?', ask.yesno);
+if (shouldLoadRow) {
+  const isRowLoaded = await loadRow_(mCtcInfo, machineAddr);
+  if (isRowLoaded) console.log('Row Loaded Successfully!');
+} else {
 }
 
 console.log('DONE CREATING ROWS!');
