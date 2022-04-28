@@ -323,5 +323,43 @@ describe('user cannot claim already assigned NFT', async (assert, args) => {
   const { getNft: badActorGetNft } = usr2CtcDispenser.a;
   await assert.error(() => badActorGetNft());
 });
+describe('user cannot insert token twice before getting NFT', async (assert, args) => {
+  const [rowCount, [acc]] = await createRow(args.mCtcInfo);
+  await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
+  const { insertToken } = await setupUser(
+    args.mCtcInfo,
+    args.payTokenId,
+    args.accMachine
+  );
+  await insertToken(getRandomBigInt());
+  await assert.error(() => insertToken(getRandomBigInt()));
+});
+
+describe('user cannot insert token twice before getting NFT', async (assert, args) => {
+  const [rowCount, [acc]] = await createRow(args.mCtcInfo);
+  await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
+  const { insertToken } = await setupUser(
+    args.mCtcInfo,
+    args.payTokenId,
+    args.accMachine
+  );
+  await insertToken(getRandomBigInt());
+  await assert.error(() => insertToken(getRandomBigInt()));
+});
+describe('User can insert another token after retrieving NFT', async (assert, args, id) => {
+  const [rowCount, [acc]] = await createRow(args.mCtcInfo);
+  await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
+  const { rows } = args.v;
+  const maxRowIndex = rows - 1;
+  await getNftForUser(1, args.mCtcInfo, args.payTokenId, args.accMachine);
+  const { insertToken } = await setupUser(
+    args.mCtcInfo,
+    args.payTokenId,
+    args.accMachine
+  );
+  const rI = await insertToken(getRandomBigInt());
+  const fmtRindex = fmtNum(rI);
+  assert.isTrue(id, fmtRindex <= maxRowIndex);
+});
 
 await startTests();

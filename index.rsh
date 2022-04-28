@@ -156,8 +156,9 @@ export const machine = Reach.App(() => {
           return [nLoaded, nRows, isRfull];
         };
       };
-      const chkInsertTkn = rNum => {
+      const chkInsertTkn = (rNum, user) => {
         const rN = getRNum(rNum);
+        check(isNone(Users[user]), 'user has inserted token')
         check(loadedRows <= rowArr.length, 'has loaded rowArr');
         const nonTakenLngth = loadedRows - emptyRows;
         const rowIndex = rN % nonTakenLngth;
@@ -320,11 +321,11 @@ export const machine = Reach.App(() => {
     .api(
       api.insertToken,
       rNum => {
-        const _ = chkInsertTkn(rNum);
+        const _ = chkInsertTkn(rNum, this);
       },
       _ => handlePmt(NFT_COST),
       (rNum, notify) => {
-        const [rD, rN] = chkInsertTkn(rNum);
+        const [rD, rN] = chkInsertTkn(rNum, this);
         Users[this] = rD;
         notify(fromSome(rD.rowIndex, 999));
         return [
