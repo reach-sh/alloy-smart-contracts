@@ -21,7 +21,9 @@ const getTokBal = async (acc, tok) => {
 const createNFts = async (acc, amt) => {
   const pms = Array(amt)
     .fill(null)
-    .map((_, i) => launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`));
+    .map((_, i) =>
+      launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`, { decimals: 0 })
+    );
   return Promise.all(pms);
 };
 
@@ -235,17 +237,19 @@ describe('user can not finish crank without inserting token', async (assert, arg
 describe('user can get nft', async (assert, args) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
   await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
+  const { nftCost: vNftCost } =args.v
+  const [l, rawNftCost] = await vNftCost();
+  const fmtNftCost = fmtNum(rawNftCost);
   const [{ bals }] = await getNftForUser(
     1,
     args.mCtcInfo,
     args.payTokenId,
     args.accMachine
   );
-  console.log('bals', bals);
   const { before, after } = bals;
   assert.equals(
     'pay token is taken',
-    before.payToken - stdlib.parseCurrency(1),
+    before.payToken - fmtNftCost,
     after.payToken
   );
   assert.equals('1 nft is given to user', before.nft + 1, after.nft);
@@ -309,7 +313,6 @@ describe('user cannot claim already assigned NFT', async (assert, args) => {
     insertToken,
     turnCrank,
     finishTurnCrank,
-    setOwner: assignNft,
     acc: userAccount,
   } = await setupUser(args.mCtcInfo, args.payTokenId, args.accMachine);
   await insertToken(getRandomBigInt());
@@ -349,7 +352,7 @@ describe('user cannot insert token twice before getting NFT', async (assert, arg
     args.accMachine
   );
   await insertToken(getRandomBigInt());
-  // await assert.error(() => insertToken(getRandomBigInt()));
+  await assert.error(() => insertToken(getRandomBigInt()));
 });
 describe('User can insert another token after retrieving NFT', async (assert, args, id) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
@@ -369,18 +372,17 @@ describe('User can insert another token after retrieving NFT', async (assert, ar
 describe('can view row map data', async (assert, args, id) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
   await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
-  console.log('args', args.v);
   const { getRow } = args.v;
   const [l, { loadedCtcs, nftCtcs, rowToksTkn }] = await getRow(acc);
   const fmtLoadedCtcs = fmtNum(loadedCtcs);
   const fmtNftCtcs = nftCtcs.map(c => fmtNum(c[1]));
   const fmtToksTkn = fmtNum(rowToksTkn);
   assert.isTrue(
-    'can see loaded contract count',
+    'can see row loaded contract count',
     typeof fmtLoadedCtcs == 'number'
   );
-  assert.isTrue('can see nft contracts', typeof fmtNftCtcs == 'object');
-  assert.isTrue('can see toks taken', typeof fmtToksTkn == 'number');
+  assert.isTrue('can see row nft contracts', typeof fmtNftCtcs == 'object');
+  assert.isTrue('can see row toks taken', typeof fmtToksTkn == 'number');
 });
 describe('can view user map data', async (assert, args, id) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);

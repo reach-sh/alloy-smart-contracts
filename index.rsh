@@ -1,7 +1,7 @@
 'reach 0.1';
 'use strict';
 
-const NFT_COST = 1 * 1000000;
+const NFT_COST = 1;
 const NUM_OF_ROWS = 3;
 const NUM_OF_ROW_ITEMS = 3;
 
@@ -16,6 +16,18 @@ const RowN = Address;
 
 export const machine = Reach.App(() => {
   setOptions({ connectors: [ALGO] });
+
+  const Row = Object({
+    nftCtcs: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
+    loadedCtcs: UInt,
+    rowToksTkn: UInt,
+  });
+
+  const User = Object({
+    nftContract: Maybe(Contract),
+    rowIndex: Maybe(UInt),
+    row: Maybe(RowN),
+  });
 
   const Machine = Participant('Machine', {
     payToken: Token,
@@ -37,22 +49,11 @@ export const machine = Reach.App(() => {
     totalToksTaken: UInt,
     totalToksLoaded: UInt,
     createdRows: UInt,
-    getUser: Fun(
-      [Address],
-      Object({
-        nftContract: Maybe(Contract),
-        rowIndex: Maybe(UInt),
-        row: Maybe(RowN),
-      })
-    ),
-    getRow: Fun(
-      [Address],
-      Object({
-        nftCtcs: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
-        loadedCtcs: UInt,
-        rowToksTkn: UInt,
-      })
-    ),
+    emptyRows: UInt,
+    payToken: Token,
+    nftCost: UInt,
+    getUser: Fun([Address], User),
+    getRow: Fun([Address], Row),
   });
   init();
 
@@ -61,24 +62,12 @@ export const machine = Reach.App(() => {
   });
   Machine.publish(payToken);
 
-  const Users = new Map(
-    Object({
-      nftContract: Maybe(Contract),
-      rowIndex: Maybe(UInt),
-      row: Maybe(RowN),
-    })
-  );
+  const Users = new Map(User);
   const defUsr = {
     nftContract: Maybe(Contract).None(),
     rowIndex: Maybe(UInt).None(),
     row: Maybe(RowN).None(),
   };
-
-  const Row = Object({
-    nftCtcs: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
-    loadedCtcs: UInt,
-    rowToksTkn: UInt,
-  });
   const Rows = new Map(Row);
   const defNfts = Array.replicate(NUM_OF_ROW_ITEMS, Maybe(Contract).None());
   const defRow = {
@@ -96,8 +85,10 @@ export const machine = Reach.App(() => {
   const getRow = row => Rows[row];
 
   // set views
+  view.payToken.set(payToken);
   view.numOfRows.set(NUM_OF_ROWS);
   view.numOfSlots.set(NUM_OF_ROW_ITEMS);
+  view.nftCost.set(NFT_COST);
   view.getUser.set(u => fromSome(Users[u], defUsr));
   view.getRow.set(u => fromSome(Rows[u], defRow));
 
@@ -117,6 +108,7 @@ export const machine = Reach.App(() => {
       view.totalToksTaken.set(totToksTkn);
       view.totalToksLoaded.set(totToksLoaded);
       view.createdRows.set(createdRows);
+      view.emptyRows.set(emptyRows);
       // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
       // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 
@@ -186,6 +178,7 @@ export const machine = Reach.App(() => {
         const rN = getRNum(rNum);
         check(isNone(Users[user]), 'user has inserted token');
         check(loadedRows > 0, 'at least one row loaded');
+        check(loadedRows > emptyRows, 'all rows are empty')
         check(loadedRows <= rowArr.length, 'has loaded rowArr');
         const nonTakenLngth = loadedRows - emptyRows;
         const rowIndex = rN % nonTakenLngth;
@@ -312,14 +305,14 @@ export const machine = Reach.App(() => {
       (contract, rNum, notify) => {
         const nR = getRNum(rNum);
         const r = chkRow(this)();
-        const nToksLoaded = updtRow(this, r, contract)();
+        const _ = updtRow(this, r, contract)();
         notify([loadedRows + 1, r.loadedCtcs + 1]);
         return [
           nR,
           totToksTkn,
           rowArr,
           loadedRows,
-          totToksLoaded + nToksLoaded,
+          totToksLoaded + 1,
           emptyRows,
           createdRows,
         ];
@@ -466,6 +459,7 @@ export const dispenser = Reach.App(() => {
   const api = API(dispenserI);
   const v = View({
     nft: Token,
+    owner: Address,
   });
 
   init();
@@ -489,6 +483,7 @@ export const dispenser = Reach.App(() => {
     check(this == mCtcAddr);
   });
   check(this == mCtcAddr);
+  v.owner.set(owner);
   k1(nft);
 
   commit();

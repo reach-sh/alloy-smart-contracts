@@ -12,7 +12,9 @@ const { launchToken } = stdlib;
 const createNFts = async (acc, amt) => {
   const pms = Array(amt)
     .fill(null)
-    .map((_, i) => launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`));
+    .map((_, i) =>
+      launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`, { decimals: 0 })
+    );
   const res = await Promise.all(pms);
   return res.map(r => r.id);
 };
@@ -120,7 +122,7 @@ if (existingMachine) {
   if (shouldCreateRow) {
     const numOfRows = await askForNumber(
       'How many rows fo you want to create?',
-      maxNumberOfRows
+      3
     );
     howManyRows = numOfRows;
   }
@@ -131,7 +133,6 @@ if (existingMachine) {
   }
 
   const shouldLoadRow = await ask.ask('Do you want to load a row?', ask.yesno);
-  // FQWWCUXF2U4BROTZUQQECUQIXAQ4FTXI22C65PYR6T6ST5WD7C3AZDSIAU
   const machineAddress = await ask.ask(
     'Please enter the machine contract address (This will be an account address like FQWWCUXF2U4BROTZUQQE...)'
   );
@@ -143,7 +144,7 @@ if (existingMachine) {
     process.exit(0);
   }
 } else {
-  console.log('')
+  console.log('');
   console.log('OK. We will create a new machine. Please follow the promps.');
 }
 
@@ -168,7 +169,8 @@ if (willProvidePayToken) {
   const { id: nPayTokenId } = await launchToken(
     accMachine,
     'Reach Thank You',
-    'RTYT'
+    'RTYT',
+    { decimals: 0 }
   );
   payTokenId = fmtNum(nPayTokenId);
 }
@@ -239,8 +241,11 @@ while (createdRows < howManyRows) {
 const shouldLoadRow = await ask.ask('Do you want to load a row?', ask.yesno);
 if (shouldLoadRow) {
   const isRowLoaded = await loadRow_(mCtcInfo, machineAddr);
-  if (isRowLoaded) console.log('Row Loaded Successfully!');
-} else {
+  if (isRowLoaded) {
+    console.log('Row Loaded Successfully!');
+  } else {
+    console.error('Row was not completely loaded');
+  }
 }
 
-console.log('DONE CREATING ROWS!');
+process.exit(0);
