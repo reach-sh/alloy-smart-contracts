@@ -21,7 +21,7 @@ export const machine = Reach.App(() => {
   });
 
   const User = Object({
-    step: UInt,
+    lastCompletedStep: UInt,
     nftContract: Maybe(Contract),
     row: Maybe(Address),
     rowIndex: Maybe(UInt),
@@ -49,6 +49,7 @@ export const machine = Reach.App(() => {
     nftCost: UInt,
     getUser: Fun([Address], User),
     getRow: Fun([Address], Row),
+    getUserCtc: Fun([Address], Maybe(Contract)),
   });
   init();
 
@@ -57,9 +58,12 @@ export const machine = Reach.App(() => {
   });
   Machine.publish(payToken);
 
+  // will store contracts for users that happen to 'quit' the flow before actually getting their NFT
+  const UsersCtcs = new Map(Contract);
+
   const Users = new Map(User);
   const defUser = {
-    step: 0,
+    lastCompletedStep: 0,
     nftContract: Maybe(Contract).None(),
     row: Maybe(Address).None(),
     rowIndex: Maybe(UInt).None(),
@@ -89,8 +93,10 @@ export const machine = Reach.App(() => {
   view.numOfRows.set(NUM_OF_ROWS);
   view.numOfSlots.set(NUM_OF_ROW_ITEMS);
   view.nftCost.set(NFT_COST);
+
   view.getUser.set(u => fromSome(Users[u], defUser));
   view.getRow.set(u => fromSome(Rows[u], defRow));
+  view.getUserCtc.set(u => UsersCtcs[u]);
 
   Machine.interact.ready(thisContract);
 
@@ -106,6 +112,11 @@ export const machine = Reach.App(() => {
         // hence the "lastConsensus" things instead
         const getRNum = N =>
           digest(N, R, lastConsensusTime(), lastConsensusSecs());
+        const chkRows = () => {
+          check(loadedRows > 0, 'at least one row loaded');
+          check(loadedRows > emptyRows, 'all rows are empty');
+          check(loadedRows <= rowArr.length, 'has loaded rowArr');
+        };
         const getIfrmArr = (arr, i, sz, t) => {
           const k = sz == 0 ? 0 : sz - 1;
           const ip = i % sz;
@@ -155,17 +166,17 @@ export const machine = Reach.App(() => {
         const insertToken = (user, rNum) => {
           const rN = getRNum(rNum);
           check(isNone(Users[user]), 'user has inserted token');
-          check(loadedRows > 0, 'at least one row loaded');
-          check(loadedRows > emptyRows, 'all rows are empty');
-          check(loadedRows <= rowArr.length, 'has loaded rowArr');
+          chkRows();
           const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
           const maxIndex = nonTakenLngth;
           check(rowIndex <= maxIndex, 'row array bounds check');
           const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
           return () => {
+            delete UsersCtcs[user];
             Users[user] = {
               ...defUser,
+              lastCompletedStep: 1,
               rowIndex: Maybe(UInt).Some(rowIndex),
               row: row,
             };
@@ -176,13 +187,8 @@ export const machine = Reach.App(() => {
           const rN = getRNum(rNum);
           const u = Users[usr];
           const user = fromSome(u, defUser);
-          const uRowI = user.row;
-          check(typeOf(u) !== null, 'user has not inserted token');
-          check(isSome(uRowI), 'make sure user has row');
-          check(isNone(user.nftContract), 'user is not assigned nft');
-          check(loadedRows > 0, 'at least one row loaded');
-          check(loadedRows > emptyRows, 'all rows are empty');
-          check(loadedRows <= rowArr.length, 'has loaded rowArr');
+          check(user.lastCompletedStep == 1, 'user is on right step');
+          chkRows();
           check(isSome(user.rowIndex), 'user was assigned a row index');
           const rowIndex = fromSome(user.rowIndex, 0);
           const nonTakenLngth = loadedRows - emptyRows;
@@ -199,6 +205,7 @@ export const machine = Reach.App(() => {
           const slotIndex = rN % nonTakenLength;
           const maxIndex = nonTakenLength;
           check(slotIndex <= maxIndex, 'slot index not in bounds');
+          const newToksTaken = rowToksTkn + 1;
           const [slot, nSlots] = getIfrmArr(
             slots,
             slotIndex,
@@ -208,17 +215,18 @@ export const machine = Reach.App(() => {
           return () => {
             Users[usr] = {
               ...user,
+              lastCompletedStep: 2,
               nftContract: slot,
             };
             Rows[rowKey] = {
               ...rowData,
               slots: nSlots,
-              rowToksTkn: rowToksTkn + 1,
+              rowToksTkn: newToksTaken,
             };
             return [
               fromSome(slot, thisContract),
-              rowToksTkn + 1 == slots.length ? nArr : rowArr,
-              rowToksTkn + 1 == slots.length ? emptyRows + 1 : emptyRows,
+              newToksTaken == slots.length ? nArr : rowArr,
+              newToksTaken == slots.length ? emptyRows + 1 : emptyRows,
               rN,
             ];
           };
@@ -226,15 +234,15 @@ export const machine = Reach.App(() => {
         const finishTurnCrank = (u, rNum) => {
           const rN = getRNum(rNum);
           const user = Users[u];
-          check(isSome(user), 'user exist');
           const sUser = fromSome(user, defUser);
-          check(isSome(sUser.nftContract), 'contract is set');
+          check(sUser.lastCompletedStep == 2, 'user is on right step');
           const ctc = fromSome(sUser.nftContract, thisContract);
           return () => {
             const dispenserCtc = remote(ctc, dispenserI);
             const nft = dispenserCtc.setOwner(u);
             check(typeOf(nft) !== null);
             delete Users[u];
+            UsersCtcs[u] = ctc;
             return [ctc, rN];
           };
         };
