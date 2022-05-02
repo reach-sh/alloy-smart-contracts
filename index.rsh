@@ -24,6 +24,7 @@ export const machine = Reach.App(() => {
     step: UInt,
     nftContract: Maybe(Contract),
     row: Maybe(Address),
+    rowIndex: Maybe(UInt),
   });
 
   const Machine = Participant('Machine', {
@@ -61,6 +62,7 @@ export const machine = Reach.App(() => {
     step: 0,
     nftContract: Maybe(Contract).None(),
     row: Maybe(Address).None(),
+    rowIndex: Maybe(UInt).None(),
   };
   const Rows = new Map(Row);
   const defNfts = Array.replicate(NUM_OF_ROW_ITEMS, Maybe(Contract).None());
@@ -114,7 +116,7 @@ export const machine = Reach.App(() => {
           const nullEndArr = Array.set(newArr, k, defI);
           return [item, nullEndArr];
         };
-        const chkRowCreate = user => {
+        const createRow = user => {
           check(createdRows < rowArr.length, 'too many rows');
           check(isNone(rowArr[createdRows]), 'check row exist');
           check(isNone(Rows[user]), 'check row exist');
@@ -124,7 +126,7 @@ export const machine = Reach.App(() => {
             return nRows;
           };
         };
-        const loadIntoRow = (r, ctc) => {
+        const loadRow = (r, ctc) => {
           check(isSome(Rows[r]), 'check row can be loaded');
           check(loadedRows <= rowArr.length);
           const row = getRow(r);
@@ -150,7 +152,7 @@ export const machine = Reach.App(() => {
             return newLoadedCount;
           };
         };
-        const insertPayTok = (user, rNum) => {
+        const insertToken = (user, rNum) => {
           const rN = getRNum(rNum);
           check(isNone(Users[user]), 'user has inserted token');
           check(loadedRows > 0, 'at least one row loaded');
@@ -160,27 +162,33 @@ export const machine = Reach.App(() => {
           const rowIndex = rN % nonTakenLngth;
           const maxIndex = nonTakenLngth;
           check(rowIndex <= maxIndex, 'row array bounds check');
-          const [row, nArr] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
-          const sRow = fromSome(row, Machine);
+          const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
           return () => {
             Users[user] = {
               ...defUser,
+              rowIndex: Maybe(UInt).Some(rowIndex),
               row: row,
             };
-            const rowData = fromSome(Rows[sRow], defRow);
-            const newRowArr =
-              rowData.rowToksTkn + 1 == rowData.slots.length ? nArr : rowArr;
-            return [fromSome(row, Machine), newRowArr, rN];
+            return [fromSome(row, Machine), rN];
           };
         };
-        const initTurnCrank = (usr, rNum) => {
+        const turnCrank = (usr, rNum) => {
           const rN = getRNum(rNum);
           const u = Users[usr];
           const user = fromSome(u, defUser);
           const uRowI = user.row;
           check(typeOf(u) !== null, 'user has not inserted token');
           check(isSome(uRowI), 'make sure user has row');
-          check(isNone(user.nftContract), 'user is not assigned nft')
+          check(isNone(user.nftContract), 'user is not assigned nft');
+          check(loadedRows > 0, 'at least one row loaded');
+          check(loadedRows > emptyRows, 'all rows are empty');
+          check(loadedRows <= rowArr.length, 'has loaded rowArr');
+          check(isSome(user.rowIndex), 'user was assigned a row index');
+          const rowIndex = fromSome(user.rowIndex, 0);
+          const nonTakenLngth = loadedRows - emptyRows;
+          const maxRindex = nonTakenLngth;
+          check(rowIndex <= maxRindex, 'row array bounds check');
+          const [_, nArr] = getIfrmArr(rowArr, rowIndex, maxRindex, Address);
           const [rowData, rowKey] = getUserRow(user);
           const { rowToksTkn, slots, loadedCtcs } = rowData;
           const isRowEmpty = rowToksTkn == loadedCtcs;
@@ -209,12 +217,13 @@ export const machine = Reach.App(() => {
             };
             return [
               fromSome(slot, thisContract),
+              rowToksTkn + 1 == slots.length ? nArr : rowArr,
               rowToksTkn + 1 == slots.length ? emptyRows + 1 : emptyRows,
               rN,
             ];
           };
         };
-        const endTurnCrank = (u, rNum) => {
+        const finishTurnCrank = (u, rNum) => {
           const rN = getRNum(rNum);
           const user = Users[u];
           check(isSome(user), 'user exist');
@@ -240,11 +249,11 @@ export const machine = Reach.App(() => {
       .api(
         api.createRow,
         () => {
-          const _ = chkRowCreate(this);
+          const _ = createRow(this);
         },
         () => handlePmt(0),
         notify => {
-          const nRows = chkRowCreate(this)();
+          const nRows = createRow(this)();
           notify([this, createdRows + 1]);
           return [
             R,
@@ -260,12 +269,12 @@ export const machine = Reach.App(() => {
       .api(
         api.loadRow,
         (contract, _) => {
-          const _ = loadIntoRow(this, contract);
+          const _ = loadRow(this, contract);
         },
         (_, _) => handlePmt(0),
         (contract, rNum, notify) => {
           const rN = getRNum(rNum);
-          const newRowLoadCount = loadIntoRow(this, contract)();
+          const newRowLoadCount = loadRow(this, contract)();
           notify([loadedRows + 1, newRowLoadCount]);
           return [
             rN,
@@ -281,16 +290,16 @@ export const machine = Reach.App(() => {
       .api(
         api.insertToken,
         rNum => {
-          const _ = insertPayTok(this, rNum);
+          const _ = insertToken(this, rNum);
         },
         _ => handlePmt(NFT_COST),
         (rNum, notify) => {
-          const [assignedRow, nArr, rN] = insertPayTok(this, rNum)();
+          const [assignedRow, rN] = insertToken(this, rNum)();
           notify(assignedRow);
           return [
             rN,
             totToksTkn + 1,
-            nArr,
+            rowArr,
             loadedRows,
             emptyRows,
             createdRows,
@@ -301,23 +310,23 @@ export const machine = Reach.App(() => {
       .api(
         api.turnCrank,
         rNum => {
-          const _ = initTurnCrank(this, rNum);
+          const _ = turnCrank(this, rNum);
         },
         _ => handlePmt(0),
         (rNum, notify) => {
-          const [rowForUsr, eRows, rN] = initTurnCrank(this, rNum)();
+          const [rowForUsr, nArr, eRows, rN] = turnCrank(this, rNum)();
           notify(rowForUsr);
-          return [rN, totToksTkn, rowArr, loadedRows, eRows, createdRows, true];
+          return [rN, totToksTkn, nArr, loadedRows, eRows, createdRows, true];
         }
       )
       .api(
         api.finishTurnCrank,
         rNum => {
-          const _ = endTurnCrank(this, rNum);
+          const _ = finishTurnCrank(this, rNum);
         },
         _ => handlePmt(0),
         (rNum, notify) => {
-          const [ctc, rN] = endTurnCrank(this, rNum)();
+          const [ctc, rN] = finishTurnCrank(this, rNum)();
           notify(ctc);
           return [
             rN,
@@ -334,7 +343,6 @@ export const machine = Reach.App(() => {
   transfer(balance()).to(Machine);
   transfer(balance(payToken), payToken).to(Machine);
   commit();
-
 });
 
 export const dispenser = Reach.App(() => {
