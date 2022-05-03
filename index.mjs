@@ -400,14 +400,15 @@ describe('can view user map data', async (assert, args) => {
   const fmtRowIAfter = fmtNum(rowIndexAfter[1]);
   assert.isTrue('user has data after insert', fmtRowIAfter <= rows);
 });
-describe('user can not reset without inserting token', async (assert, args, id) => {
+describe('user can not reset without having empty row', async (assert, args, id) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
   await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
-  const { reset } = await setupUser(
+  const { reset, insertToken } = await setupUser(
     args.mCtcInfo,
     args.payTokenId,
     args.accMachine
   );
+  await insertToken(getRandomBigInt());
   assert.error(() => reset(getRandomBigInt()));
 });
 
