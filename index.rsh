@@ -39,6 +39,7 @@ export const machine = Reach.App(() => {
     insertToken: Fun([UInt], Address),
     turnCrank: Fun([UInt], Contract),
     finishTurnCrank: Fun([UInt], Contract),
+    reset: Fun([UInt], Null),
   });
   const view = View({
     numOfRows: UInt,
@@ -47,6 +48,7 @@ export const machine = Reach.App(() => {
     emptyRows: UInt,
     payToken: Token,
     nftCost: UInt,
+    totToksTkn: UInt,
     getUser: Fun([Address], User),
     getRow: Fun([Address], Row),
     getUserCtc: Fun([Address], Maybe(Contract)),
@@ -103,6 +105,7 @@ export const machine = Reach.App(() => {
   const [R, totToksTkn, rowArr, loadedRows, emptyRows, createdRows, keepGoing] =
     parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, true])
       .define(() => {
+        view.totToksTkn.set(totToksTkn);
         view.loadedRows.set(loadedRows);
         view.emptyRows.set(emptyRows);
         // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
@@ -246,6 +249,25 @@ export const machine = Reach.App(() => {
             return [ctc, rN];
           };
         };
+        const reset = (rNum, u) => {
+          const rN = getRNum(rNum);
+          const user = Users[u];
+          const sUser = fromSome(user, defUser);
+          check(sUser.lastCompletedStep == 1, 'user has inserted token')
+          check(isSome(sUser.row), 'user has row')
+          check(isNone(sUser.nftContract), 'user not assigned contract');
+          check(totToksTkn > 0, 'there are no tokens taken')
+          const sUsrRow = fromSome(sUser.row, Machine);
+          const rowData = fromSome(Rows[sUsrRow], defRow)
+          const { rowToksTkn, loadedCtcs } = rowData;
+          const isRowEmpty = rowToksTkn == loadedCtcs;
+          check(isRowEmpty, 'row is not empty');
+          return () => {
+            transfer([0, [NFT_COST, payToken]]).to(u)
+            delete Users[u];
+            return rN
+          }
+        }
       })
       .invariant(
         balance() === 0 &&
@@ -339,6 +361,26 @@ export const machine = Reach.App(() => {
           return [
             rN,
             totToksTkn,
+            rowArr,
+            loadedRows,
+            emptyRows,
+            createdRows,
+            true,
+          ];
+        }
+      )
+      .api(
+        api.reset,
+        rNum => {
+          const _ = reset(rNum, this);
+        },
+        _ => handlePmt(0),
+        (rNum, notify) => {
+          const rN = reset(rNum, this)();
+          notify(null)
+          return [
+            rN,
+            totToksTkn - 1,
             rowArr,
             loadedRows,
             emptyRows,

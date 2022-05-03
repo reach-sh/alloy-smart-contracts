@@ -369,7 +369,7 @@ describe('User can insert another token after retrieving NFT', async (assert, ar
   const fmtRow = fmtAddr(r);
   assert.isTrue(id, Boolean(fmtRow));
 });
-describe('can view row map data', async (assert, args, id) => {
+describe('can view row map data', async (assert, args) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
   await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
   const { getRow } = args.v;
@@ -384,7 +384,7 @@ describe('can view row map data', async (assert, args, id) => {
   assert.isTrue('can see row nft contracts', typeof fmtNftCtcs == 'object');
   assert.isTrue('can see row toks taken', typeof fmtToksTkn == 'number');
 });
-describe('can view user map data', async (assert, args, id) => {
+describe('can view user map data', async (assert, args) => {
   const [rowCount, [acc]] = await createRow(args.mCtcInfo);
   await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
   const { getUser, rows } = args.v;
@@ -399,6 +399,16 @@ describe('can view user map data', async (assert, args, id) => {
   const [l, { rowIndex: rowIndexAfter }] = await getUser(userAcc);
   const fmtRowIAfter = fmtNum(rowIndexAfter[1]);
   assert.isTrue('user has data after insert', fmtRowIAfter <= rows);
+});
+describe('user can not reset without inserting token', async (assert, args, id) => {
+  const [rowCount, [acc]] = await createRow(args.mCtcInfo);
+  await loadRow(args.machineAddr, args.mCtcInfo, acc, args.v);
+  const { reset } = await setupUser(
+    args.mCtcInfo,
+    args.payTokenId,
+    args.accMachine
+  );
+  assert.error(() => reset(getRandomBigInt()));
 });
 
 await startTests();
