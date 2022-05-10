@@ -24,13 +24,14 @@ const createNFts = async (acc, amt) => {
     .map((_, i) =>
       launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`, { decimals: 0 })
     );
-  return Promise.all(pms);
+  const res = await Promise.all(pms);
+  return res.map(r => r.id);
 };
 
 //create NFT contract
-const createNftCtcs = (acc, nfts) =>
-  nfts.map(nft => ({
-    nft,
+const createNftCtcs = (acc, nftIds) =>
+  nftIds.map(nftId => ({
+    nftId,
     ctc: acc.contract(dispenserBackend),
   }));
 
@@ -44,7 +45,7 @@ const deployNftCtcs = async (nftHs, machineAddr) => {
           ctcAddress.push(ctc);
           res();
         },
-        nft: nft.nft.id,
+        nft: nft.nftId,
         mCtcAddr: machineAddr,
       });
     });
@@ -78,13 +79,8 @@ const loadRow = async (machineAddr, info, acc, views) => {
   const nfts = await createNFts(acc, slots);
   const nftCtcs = createNftCtcs(acc, nfts);
   const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
-  for (const ctc of nftCtcAdds) {
-    const [row, rIndex] = await ctcMachine.a.loadRow(ctc, getRandomBigInt());
-    const fmtR = fmtNum(row);
-    const fmtRi = fmtNum(rIndex);
-    console.log(`Loading Row ${fmtR} slot ${fmtRi}`);
-  }
-  // const isRowLoaded = await ctcMachine.a.checkIfLoaded();
+  const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
+  await Promise.all(pms);
   return true;
 };
 

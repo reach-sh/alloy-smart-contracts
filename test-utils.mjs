@@ -39,13 +39,13 @@ const chkScenerio__ = async (lab, go, opts = {}) => {
   } catch (e) {
     if ('x' in e) {
       const { v: views } = ctcMachine;
-      const { numOfRows, numOfSlots, getRow, getUser } = views;
+      const { numOfRows, numOfSlots } = views;
       const [rawRowNum, rawSlotNum] = await Promise.all([
         numOfRows(),
         numOfSlots(),
       ]);
       const fmtRowNum = fmtNum(rawRowNum[1]);
-      const fmtSlotNum = fmtNum(rawRowNum[1]);
+      const fmtSlotNum = fmtNum(rawSlotNum[1]);
       v = { rows: fmtRowNum, slots: fmtSlotNum, ...views };
     } else {
       throw e;

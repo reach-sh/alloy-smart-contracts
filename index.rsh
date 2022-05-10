@@ -124,7 +124,6 @@ export const machine = Reach.App(() => {
           const k = sz == 0 ? 0 : sz - 1;
           const ip = i % sz;
           const item = arr[ip];
-          check(isSome(item), 'arr item has data');
           const defI = Maybe(t).None();
           const newArr = Array.set(arr, ip, arr[k]);
           const nullEndArr = Array.set(newArr, k, defI);
@@ -175,6 +174,7 @@ export const machine = Reach.App(() => {
           const maxIndex = nonTakenLngth;
           check(rowIndex <= maxIndex, 'row array bounds check');
           const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
+          check(isSome(row), 'check row is valid')
           return () => {
             delete UsersCtcs[user];
             Users[user] = {
@@ -215,6 +215,7 @@ export const machine = Reach.App(() => {
             maxIndex,
             Contract
           );
+          check(isSome(slot), 'check slot is valid')
           return () => {
             Users[usr] = {
               ...user,

@@ -84,23 +84,16 @@ const loadRow_ = async (info, machineAddr) => {
   );
   const fmtMnemonic = mnemonic.replace(/,/g, '');
   const acc = await stdlib.newAccountFromMnemonic(fmtMnemonic);
-  //   const nftIds = await ask.ask(
-  //     'Please paste the NFT ids you want to load as comma seperate values (i.e. 123456,456789,44444,etc.):'
-  //   );
   // TODO: change this to take the NFT's from the account or pasted in NFT ID's
   // for rapid testing on testnet
-  const fmtNftIds = await createNFts(acc, 3);
+  const fmtNftIds = await createNFts(acc, 60);
   const ctcMachine = acc.contract(machineBackend, info);
   const nftCtcs = createNftCtcs(acc, fmtNftIds);
   console.log('Deploying NFT contracts...');
   const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
   console.log('Loading Rows...');
-  for (const ctc of nftCtcAdds) {
-    const [row, rIndex] = await ctcMachine.a.loadRow(ctc, getRandomBigInt());
-    const fmtR = fmtNum(row);
-    const fmtRi = fmtNum(rIndex);
-    console.log(`Loaded slot ${fmtRi} in row ${fmtR}`);
-  }
+  const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
+  await Promise.all(pms)
   return true;
 };
 
