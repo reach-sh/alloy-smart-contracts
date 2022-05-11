@@ -6,7 +6,7 @@ const stdlib = loadStdlib('ALGO-devnet');
 const { launchToken } = stdlib;
 
 const LOUD = true;
-const HOW_MANY_AT_OINCE = 15;
+const HOW_MANY_AT_ONCE = 15;
 
 const jobs = [];
 const cases = [];
@@ -24,7 +24,8 @@ const chkScenerio__ = async (lab, go, opts = {}) => {
   const { id: payTokenId } = await launchToken(
     accMachine,
     'Reach Thank You',
-    'RTYT'
+    'RTYT',
+    { decimals: 0 }
   );
   // deploy contract
   try {
@@ -44,8 +45,8 @@ const chkScenerio__ = async (lab, go, opts = {}) => {
         numOfSlots(),
       ]);
       const fmtRowNum = fmtNum(rawRowNum[1]);
-      const fmtSlotNum = fmtNum(rawRowNum[1]);
-      v = { rows: fmtRowNum, slots: fmtSlotNum };
+      const fmtSlotNum = fmtNum(rawSlotNum[1]);
+      v = { rows: fmtRowNum, slots: fmtSlotNum, ...views };
     } else {
       throw e;
     }
@@ -121,9 +122,9 @@ export const chkErr = async (id, f) => {
 export const startTests = async () => {
   console.log(`${jobs.length} jobs scheduled, running...`);
   while (jobs.length > 0) {
-    console.log(`Spawning ${HOW_MANY_AT_OINCE} of ${jobs.length} jobs`);
+    console.log(`Spawning ${HOW_MANY_AT_ONCE} of ${jobs.length} jobs`);
     const active = [];
-    while (jobs.length > 0 && active.length < HOW_MANY_AT_OINCE) {
+    while (jobs.length > 0 && active.length < HOW_MANY_AT_ONCE) {
       active.push(jobs.pop()());
     }
     console.log(`Waiting for ${active.length} jobs`);

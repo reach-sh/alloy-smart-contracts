@@ -11,29 +11,48 @@ const dispenserI = {
   getNft: Fun([], Token),
 };
 
-// alias for row item
-const RowN = Address;
-
 export const machine = Reach.App(() => {
   setOptions({ connectors: [ALGO] });
 
+  const Row = Object({
+    slots: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
+    loadedCtcs: UInt,
+    rowToksTkn: UInt,
+  });
+
+  const User = Object({
+    lastCompletedStep: UInt,
+    nftContract: Maybe(Contract),
+    row: Maybe(Address),
+    rowIndex: Maybe(UInt),
+  });
+
   const Machine = Participant('Machine', {
     payToken: Token,
+    numOfRows: UInt,
+    numOfSlots: UInt,
     ready: Fun([Contract], Null),
   });
   const api = API({
     createRow: Fun([], Tuple(Address, UInt)),
     loadRow: Fun([Contract, UInt], Tuple(UInt, UInt)),
-    checkIfLoaded: Fun([], Bool),
-    insertToken: Fun([UInt], UInt),
-    turnCrank: Fun([UInt], RowN),
+    insertToken: Fun([UInt], Address),
+    turnCrank: Fun([UInt], Contract),
     finishTurnCrank: Fun([UInt], Contract),
-    setOwner: Fun([], Null),
+    reset: Fun([UInt], Null),
   });
   const view = View({
     numOfRows: UInt,
-    numOfSlots: UInt
-  })
+    numOfSlots: UInt,
+    loadedRows: UInt,
+    emptyRows: UInt,
+    payToken: Token,
+    nftCost: UInt,
+    totToksTkn: UInt,
+    getUser: Fun([Address], User),
+    getRow: Fun([Address], Row),
+    getUserCtc: Fun([Address], Maybe(Contract)),
+  });
   init();
 
   Machine.only(() => {
@@ -41,391 +60,340 @@ export const machine = Reach.App(() => {
   });
   Machine.publish(payToken);
 
-  const Users = new Map(
-    Object({
-      nftContract: Maybe(Contract),
-      rowIndex: Maybe(UInt),
-      row: Maybe(RowN),
-    })
-  );
-  const defUsr = {
-    nftContract: Maybe(Contract).None(),
-    rowIndex: Maybe(UInt).None(),
-    row: Maybe(RowN).None(),
-  };
+  // will store contracts for users that happen to 'quit' the flow before actually getting their NFT
+  const UsersCtcs = new Map(Contract);
 
-  const Row = Object({
-    nftCtcs: Array(Maybe(Contract), NUM_OF_ROW_ITEMS),
-    loadedCtcs: UInt,
-    rowToksTkn: UInt,
-  });
+  const Users = new Map(User);
+  const defUser = {
+    lastCompletedStep: 0,
+    nftContract: Maybe(Contract).None(),
+    row: Maybe(Address).None(),
+    rowIndex: Maybe(UInt).None(),
+  };
   const Rows = new Map(Row);
   const defNfts = Array.replicate(NUM_OF_ROW_ITEMS, Maybe(Contract).None());
   const defRow = {
-    nftCtcs: defNfts,
+    slots: defNfts,
     loadedCtcs: 0,
     rowToksTkn: 0,
   };
 
   const rowPicker = Array.replicate(NUM_OF_ROWS, Maybe(Address).None());
-
   const thisContract = getContract();
 
   const handlePmt = amt => [0, [amt, payToken]];
-
   const getRow = row => Rows[row];
+  const getUserRow = user => {
+    const sRow = fromSome(user.row, Machine);
+    const assignedRow = Rows[sRow];
+    const rowData = fromSome(assignedRow, defRow);
+    return [rowData, sRow];
+  };
 
   // set views
+  view.payToken.set(payToken);
   view.numOfRows.set(NUM_OF_ROWS);
   view.numOfSlots.set(NUM_OF_ROW_ITEMS);
+  view.nftCost.set(NFT_COST);
+
+  view.getUser.set(u => fromSome(Users[u], defUser));
+  view.getRow.set(u => fromSome(Rows[u], defRow));
+  view.getUserCtc.set(u => UsersCtcs[u]);
 
   Machine.interact.ready(thisContract);
 
-  const [
-    R,
-    totToksTkn,
-    rowArr,
-    loadedRows,
-    totToksLoaded,
-    emptyRows,
-    createdRows,
-  ] = parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, 0])
-    .define(() => {
-      // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
-      // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
+  const [R, totToksTkn, rowArr, loadedRows, emptyRows, createdRows, keepGoing] =
+    parallelReduce([digest(0), 0, rowPicker, 0, 0, 0, true])
+      .define(() => {
+        view.totToksTkn.set(totToksTkn);
+        view.loadedRows.set(loadedRows);
+        view.emptyRows.set(emptyRows);
+        // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
+        // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
 
-      // this would not compile when using thisConsensusTime() and thisConsensusSecs()
-      // hence the "lastConsensus" things instead
-      const getRNum = N =>
-        digest(N, R, lastConsensusTime(), lastConsensusSecs());
-      const chkRowCreate = user => {
-        check(createdRows < rowArr.length, 'too many rows');
-        check(isNone(rowArr[createdRows]), 'check row exist');
-        check(isNone(Rows[user]), 'check row exist');
-        const nRows = rowArr.set(createdRows, Maybe(Address).Some(user));
-        check(isSome(nRows[createdRows]), 'check row was created');
-        return nRows;
-      };
-      const getIfrmArr = (arr, i, sz, t, y) => {
-        const k = sz == 0 ? 0 : sz - 1;
-        const ip = y ? i : i % sz;
-        const item = arr[ip];
-        check(isSome(item), 'arr item has data');
-        const defI = Maybe(t).None();
-        const newArr = Array.set(arr, ip, arr[k]);
-        const nullEndArr = Array.set(newArr, k, defI);
-        return [item, nullEndArr];
-      };
-      const chkRow = user => {
-        check(isSome(Rows[user]), 'check row can be loaded');
-        check(loadedRows <= rowArr.length);
-        const row = getRow(user);
-        const sRow = fromSome(row, defRow);
-        check(sRow.loadedCtcs < sRow.nftCtcs.length);
-        const isRowFull = sRow.loadedCtcs == sRow.nftCtcs.length;
-        check(!isRowFull);
-        return () => sRow;
-      };
-      const updtRow = (user, r, ctc) => {
-        const newArr = r.nftCtcs.set(r.loadedCtcs, Maybe(Contract).Some(ctc));
-        check(
-          r.loadedCtcs + 1 <= newArr.length,
-          'make sure row does not exceed bounds'
-        );
-        check(isSome(Rows[user]), 'check row can be updated');
-        Rows[user] = {
-          nftCtcs: newArr,
-          loadedCtcs: r.loadedCtcs + 1,
-          rowToksTkn: 0,
+        // this would not compile when using thisConsensusTime() and thisConsensusSecs()
+        // hence the "lastConsensus" things instead
+        const getRNum = N =>
+          digest(N, R, lastConsensusTime(), lastConsensusSecs());
+        const chkRows = () => {
+          check(loadedRows > 0, 'at least one row loaded');
+          check(loadedRows > emptyRows, 'all rows are empty');
+          check(loadedRows <= rowArr.length, 'has loaded rowArr');
         };
-        return () => r.loadedCtcs + 1;
-      };
-      const chkLoad = user => {
-        check(isSome(Rows[user]), 'check row exist');
-        check(
-          loadedRows < rowArr.length,
-          'check loaded rowArr are less than length'
-        );
-        return () => {
-          const row = getRow(user);
+        const getIfrmArr = (arr, i, sz, t) => {
+          const k = sz == 0 ? 0 : sz - 1;
+          const ip = i % sz;
+          const item = arr[ip];
+          const defI = Maybe(t).None();
+          const newArr = Array.set(arr, ip, arr[k]);
+          const nullEndArr = Array.set(newArr, k, defI);
+          return [item, nullEndArr];
+        };
+        const createRow = user => {
+          check(createdRows < rowArr.length, 'too many rows');
+          check(isNone(rowArr[createdRows]), 'check row exist');
+          check(isNone(Rows[user]), 'check row exist');
+          const nRows = rowArr.set(createdRows, Maybe(Address).Some(user));
+          return () => {
+            Rows[user] = defRow;
+            return nRows;
+          };
+        };
+        const loadRow = (r, ctc) => {
+          check(isSome(Rows[r]), 'check row can be loaded');
+          check(loadedRows <= rowArr.length);
+          const row = getRow(r);
           const sRow = fromSome(row, defRow);
-          const isRfull = sRow.loadedCtcs == sRow.nftCtcs.length;
-          const nLoaded = isRfull ? loadedRows + 1 : loadedRows;
-          check(nLoaded <= rowArr.length, 'max rows reached');
-          const nRows = rowArr.set(loadedRows, Maybe(RowN).Some(user));
-          return [nLoaded, nRows, isRfull];
+          check(sRow.loadedCtcs < sRow.slots.length);
+          const isRowFull = sRow.loadedCtcs == sRow.slots.length;
+          check(!isRowFull);
+          const newLoadedCount = sRow.loadedCtcs + 1;
+          const newArr = sRow.slots.set(
+            sRow.loadedCtcs,
+            Maybe(Contract).Some(ctc)
+          );
+          check(
+            newLoadedCount <= newArr.length,
+            'make sure row does not exceed bounds'
+          );
+          return () => {
+            Rows[r] = {
+              slots: newArr,
+              loadedCtcs: newLoadedCount,
+              rowToksTkn: 0,
+            };
+            return newLoadedCount;
+          };
         };
-      };
-      const chkInsertTkn = rNum => {
-        const rN = getRNum(rNum);
-        check(loadedRows <= rowArr.length, 'has loaded rowArr');
-        const nonTakenLngth = loadedRows - emptyRows;
-        const rowIndex = rN % nonTakenLngth;
-        const maxIndex = nonTakenLngth - 1;
-        check(rowIndex <= maxIndex, 'row array bounds check');
-        const d = {
-          ...defUsr,
-          rowIndex: Maybe(UInt).Some(rowIndex),
+        const insertToken = (user, rNum) => {
+          const rN = getRNum(rNum);
+          check(isNone(Users[user]), 'user has inserted token');
+          chkRows();
+          const nonTakenLngth = loadedRows - emptyRows;
+          const rowIndex = rN % nonTakenLngth;
+          const maxIndex = nonTakenLngth;
+          check(rowIndex <= maxIndex, 'row array bounds check');
+          const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
+          check(isSome(row), 'check row is valid')
+          return () => {
+            delete UsersCtcs[user];
+            Users[user] = {
+              ...defUser,
+              lastCompletedStep: 1,
+              rowIndex: Maybe(UInt).Some(rowIndex),
+              row: row,
+            };
+            return [fromSome(row, Machine), rN];
+          };
         };
-        return [d, rN];
-      };
-      const chkTurnCrank = (usr, _) => {
-        const u = Users[usr];
-        check(typeOf(u) !== null, 'user has not inserted token');
-        check(isSome(u), 'there is uer data');
-        const user = fromSome(u, defUsr);
-        const uRowI = user.rowIndex;
-        check(
-          isSome(uRowI) && isNone(user.nftContract),
-          'make sure user has row'
-        );
-        const sRowI = fromSome(uRowI, 999);
-        check(loadedRows <= rowArr.length, 'loaded rows out of bounds');
-        check(sRowI !== 999, 'row is not valid');
-        const nonEmptyLength = loadedRows - emptyRows;
-        const maxIndex = nonEmptyLength;
-        check(sRowI <= maxIndex, 'row array bounds check');
-        const [row, nArr] = getIfrmArr(rowArr, sRowI, maxIndex, Address, false);
-        check(isSome(row), 'row has data');
-        return () => {
-          switch (row) {
-            case Some: {
-              const rData = Rows[row];
-              check(isSome(rData), 'check row is valid');
-              const rowForUsr = fromSome(rData, defRow);
-              const { nftCtcs, rowToksTkn, loadedCtcs } = rowForUsr;
-              const isRowEmpty = rowToksTkn == nftCtcs.length;
-              check(!isRowEmpty, 'row is empty');
-              check(loadedCtcs <= nftCtcs.length, 'loaded nfts are in bounds');
-              return [
-                user,
-                row,
-                { ...rowForUsr, rowToksTkn: rowToksTkn },
-                rowToksTkn + 1 == nftCtcs.length ? nArr : rowArr,
-                rowToksTkn + 1 == nftCtcs.length ? emptyRows + 1 : emptyRows,
-              ];
-            }
-            case None: {
-              return [user, Machine, defRow, rowArr, emptyRows];
-            }
+        const turnCrank = (usr, rNum) => {
+          const rN = getRNum(rNum);
+          const u = Users[usr];
+          const user = fromSome(u, defUser);
+          check(user.lastCompletedStep == 1, 'user is on right step');
+          chkRows();
+          check(isSome(user.rowIndex), 'user was assigned a row index');
+          const rowIndex = fromSome(user.rowIndex, 0);
+          const nonTakenLngth = loadedRows - emptyRows;
+          const maxRindex = nonTakenLngth;
+          check(rowIndex <= maxRindex, 'row array bounds check');
+          const [_, nArr] = getIfrmArr(rowArr, rowIndex, maxRindex, Address);
+          const [rowData, rowKey] = getUserRow(user);
+          const { rowToksTkn, slots, loadedCtcs } = rowData;
+          const isRowEmpty = rowToksTkn == loadedCtcs;
+          check(!isRowEmpty, 'row is empty');
+          check(loadedCtcs == slots.length);
+          check(rowToksTkn < slots.length, 'row tokens taken are in bounds');
+          const nonTakenLength = slots.length - rowToksTkn;
+          const slotIndex = rN % nonTakenLength;
+          const maxIndex = nonTakenLength;
+          check(slotIndex <= maxIndex, 'slot index not in bounds');
+          const newToksTaken = rowToksTkn + 1;
+          const [slot, nSlots] = getIfrmArr(
+            slots,
+            slotIndex,
+            maxIndex,
+            Contract
+          );
+          check(isSome(slot), 'check slot is valid')
+          return () => {
+            Users[usr] = {
+              ...user,
+              lastCompletedStep: 2,
+              nftContract: slot,
+            };
+            Rows[rowKey] = {
+              ...rowData,
+              slots: nSlots,
+              rowToksTkn: newToksTaken,
+            };
+            return [
+              fromSome(slot, thisContract),
+              newToksTaken == slots.length ? nArr : rowArr,
+              newToksTaken == slots.length ? emptyRows + 1 : emptyRows,
+              rN,
+            ];
+          };
+        };
+        const finishTurnCrank = (u, rNum) => {
+          const rN = getRNum(rNum);
+          const user = Users[u];
+          const sUser = fromSome(user, defUser);
+          check(sUser.lastCompletedStep == 2, 'user is on right step');
+          const ctc = fromSome(sUser.nftContract, thisContract);
+          return () => {
+            const dispenserCtc = remote(ctc, dispenserI);
+            const nft = dispenserCtc.setOwner(u);
+            check(typeOf(nft) !== null);
+            delete Users[u];
+            UsersCtcs[u] = ctc;
+            return [ctc, rN];
+          };
+        };
+        const reset = (rNum, u) => {
+          const rN = getRNum(rNum);
+          const user = Users[u];
+          const sUser = fromSome(user, defUser);
+          check(sUser.lastCompletedStep == 1, 'user has inserted token')
+          check(isSome(sUser.row), 'user has row')
+          check(isNone(sUser.nftContract), 'user not assigned contract');
+          check(totToksTkn > 0, 'there are no tokens taken')
+          const sUsrRow = fromSome(sUser.row, Machine);
+          const rowData = fromSome(Rows[sUsrRow], defRow)
+          const { rowToksTkn, loadedCtcs } = rowData;
+          const isRowEmpty = rowToksTkn == loadedCtcs;
+          check(isRowEmpty, 'row is not empty');
+          return () => {
+            transfer([0, [NFT_COST, payToken]]).to(u)
+            delete Users[u];
+            return rN
           }
-        };
-      };
-      const chkFinalCrank = (u, rNum) => {
-        const user = fromSome(Users[u], defUsr);
-        check(isSome(user.row), 'user is assigned row');
-        check(isSome(user.rowIndex), 'user is assigned row index');
-        check(isNone(user.nftContract), 'user does not have contract');
-        check(emptyRows <= rowArr.length, 'empty rows in bounds');
-        const rowData = Rows[fromSome(user.row, Machine)];
-        check(fromSome(user.rowIndex, 999) < rowArr.length);
-        check(isSome(rowData), '44');
-        const sRowData = fromSome(rowData, defRow);
-        const { rowToksTkn, nftCtcs } = sRowData;
-        const rN = getRNum(rNum);
-        check(loadedRows <= rowArr.length, 'has loaded rows');
-        check(rowToksTkn <= nftCtcs.length, 'row tokens taken are in bounds');
-        const nonTakenLength = nftCtcs.length - rowToksTkn;
-        const slotIndex = rN % nonTakenLength;
-        const maxIndex = nonTakenLength;
-        check(slotIndex <= maxIndex, 'slot index not in bounds');
-        const [slot, nArr] = getIfrmArr(
-          nftCtcs,
-          slotIndex,
-          maxIndex,
-          Contract,
-          false
-        );
-        const nCtc = fromSome(slot, thisContract);
-        check(nCtc !== thisContract, 'slot contract is valid');
-        return [
-          user,
-          nCtc,
-          { ...sRowData, nftCtcs: nArr, rowToksTkn: rowToksTkn + 1 },
-          emptyRows,
-        ];
-      };
-    })
-    .invariant(
-      balance() === 0 &&
-        balance(payToken) / NFT_COST == totToksTkn &&
-        Rows.size() == createdRows
-    )
-    .while(totToksTkn <= NUM_OF_ROWS * NUM_OF_ROW_ITEMS)
-    .paySpec([payToken])
-    .api(
-      api.createRow,
-      () => {
-        const _ = chkRowCreate(this);
-      },
-      () => handlePmt(0),
-      notify => {
-        const nRows = chkRowCreate(this);
-        Rows[this] = defRow;
-        check(isSome(Rows[this]), 'check row created');
-        notify([this, createdRows + 1]);
-        return [
-          R,
-          totToksTkn,
-          nRows,
-          loadedRows,
-          totToksLoaded,
-          emptyRows,
-          createdRows + 1,
-        ];
-      }
-    )
-    .api(
-      api.loadRow,
-      (_, _) => {
-        const _ = chkRow(this)();
-      },
-      (_, _) => handlePmt(0),
-      (contract, rNum, notify) => {
-        const nR = getRNum(rNum);
-        const r = chkRow(this)();
-        const nToksLoaded = updtRow(this, r, contract)();
-        notify([loadedRows + 1, r.loadedCtcs + 1]);
-        return [
-          nR,
-          totToksTkn,
-          rowArr,
-          loadedRows,
-          totToksLoaded + nToksLoaded,
-          emptyRows,
-          createdRows,
-        ];
-      }
-    )
-    .api(
-      api.checkIfLoaded,
-      () => {
-        const _ = chkLoad(this)();
-      },
-      () => handlePmt(0),
-      notify => {
-        const [nLoaded, nRows, isRfull] = chkLoad(this)();
-        notify(isRfull);
-        return [
-          R,
-          totToksTkn,
-          nRows,
-          nLoaded,
-          totToksLoaded,
-          emptyRows,
-          createdRows,
-        ];
-      }
-    )
-    .api(
-      api.insertToken,
-      rNum => {
-        const _ = chkInsertTkn(rNum);
-      },
-      _ => handlePmt(NFT_COST),
-      (rNum, notify) => {
-        const [rD, rN] = chkInsertTkn(rNum);
-        Users[this] = rD;
-        notify(fromSome(rD.rowIndex, 999));
-        return [
-          rN,
-          totToksTkn + 1,
-          rowArr,
-          loadedRows,
-          totToksLoaded,
-          emptyRows,
-          createdRows,
-        ];
-      }
-    )
-    .api(
-      api.turnCrank,
-      rNum => {
-        const _ = chkTurnCrank(this, rNum)();
-      },
-      _ => handlePmt(0),
-      (rNum, notify) => {
-        const rN = getRNum(rNum);
-        const [user, rowForUsr, rData, nRows, eRows] = chkTurnCrank(
-          this,
-          rNum
-        )();
-        Users[this] = {
-          ...user,
-          row: Maybe(RowN).Some(rowForUsr),
-        };
-        Rows[rowForUsr] = {
-          ...rData,
-        };
-        notify(rowForUsr);
-        return [
-          rN,
-          totToksTkn,
-          nRows,
-          loadedRows,
-          totToksLoaded,
-          eRows,
-          createdRows,
-        ];
-      }
-    )
-    .api(
-      api.finishTurnCrank,
-      rNum => {
-        const _ = chkFinalCrank(this, rNum);
-      },
-      _ => handlePmt(0),
-      (rNum, notify) => {
-        const [user, ctc, rData, eRows] = chkFinalCrank(this, rNum);
-        Users[this] = {
-          ...user,
-          nftContract: Maybe(Contract).Some(ctc),
-        };
-        const t = fromSome(user.row, Machine);
-        Rows[t] = rData;
-        notify(ctc);
-        return [
-          R,
-          totToksTkn,
-          rowArr,
-          loadedRows,
-          totToksLoaded,
-          eRows,
-          createdRows,
-        ];
-      }
-    )
-    .api(
-      api.setOwner,
-      () => {},
-      () => handlePmt(0),
-      k => {
-        const user = Users[this];
-        const sUser = fromSome(user, defUsr);
-        const ctc = fromSome(sUser.nftContract, thisContract);
-        const dispenserCtc = remote(ctc, dispenserI);
-        const nft = dispenserCtc.setOwner(this);
-        check(typeOf(nft) !== null);
-        k(null);
-        return [
-          R,
-          totToksTkn,
-          rowArr,
-          loadedRows,
-          totToksLoaded,
-          emptyRows,
-          createdRows,
-        ];
-      }
-    );
+        }
+      })
+      .invariant(
+        balance() === 0 &&
+          NFT_COST * totToksTkn == balance(payToken) &&
+          Rows.size() == createdRows
+      )
+      .while(keepGoing)
+      .paySpec([payToken])
+      .api(
+        api.createRow,
+        () => {
+          const _ = createRow(this);
+        },
+        () => handlePmt(0),
+        notify => {
+          const nRows = createRow(this)();
+          notify([this, createdRows + 1]);
+          return [
+            R,
+            totToksTkn,
+            nRows,
+            loadedRows,
+            emptyRows,
+            createdRows + 1,
+            true,
+          ];
+        }
+      )
+      .api(
+        api.loadRow,
+        (contract, _) => {
+          const _ = loadRow(this, contract);
+        },
+        (_, _) => handlePmt(0),
+        (contract, rNum, notify) => {
+          const rN = getRNum(rNum);
+          const newRowLoadCount = loadRow(this, contract)();
+          notify([loadedRows + 1, newRowLoadCount]);
+          return [
+            rN,
+            totToksTkn,
+            rowArr,
+            newRowLoadCount == NUM_OF_ROW_ITEMS ? loadedRows + 1 : loadedRows,
+            emptyRows,
+            createdRows,
+            true,
+          ];
+        }
+      )
+      .api(
+        api.insertToken,
+        rNum => {
+          const _ = insertToken(this, rNum);
+        },
+        _ => handlePmt(NFT_COST),
+        (rNum, notify) => {
+          const [assignedRow, rN] = insertToken(this, rNum)();
+          notify(assignedRow);
+          return [
+            rN,
+            totToksTkn + 1,
+            rowArr,
+            loadedRows,
+            emptyRows,
+            createdRows,
+            true,
+          ];
+        }
+      )
+      .api(
+        api.turnCrank,
+        rNum => {
+          const _ = turnCrank(this, rNum);
+        },
+        _ => handlePmt(0),
+        (rNum, notify) => {
+          const [rowForUsr, nArr, eRows, rN] = turnCrank(this, rNum)();
+          notify(rowForUsr);
+          return [rN, totToksTkn, nArr, loadedRows, eRows, createdRows, true];
+        }
+      )
+      .api(
+        api.finishTurnCrank,
+        rNum => {
+          const _ = finishTurnCrank(this, rNum);
+        },
+        _ => handlePmt(0),
+        (rNum, notify) => {
+          const [ctc, rN] = finishTurnCrank(this, rNum)();
+          notify(ctc);
+          return [
+            rN,
+            totToksTkn,
+            rowArr,
+            loadedRows,
+            emptyRows,
+            createdRows,
+            true,
+          ];
+        }
+      )
+      .api(
+        api.reset,
+        rNum => {
+          const _ = reset(rNum, this);
+        },
+        _ => handlePmt(0),
+        (rNum, notify) => {
+          const rN = reset(rNum, this)();
+          notify(null)
+          return [
+            rN,
+            totToksTkn - 1,
+            rowArr,
+            loadedRows,
+            emptyRows,
+            createdRows,
+            true,
+          ];
+        }
+      );
 
   transfer(balance()).to(Machine);
   transfer(balance(payToken), payToken).to(Machine);
   commit();
-  Anybody.publish();
-
-  commit();
-  exit();
 });
 
 export const dispenser = Reach.App(() => {
@@ -437,6 +405,7 @@ export const dispenser = Reach.App(() => {
   const api = API(dispenserI);
   const v = View({
     nft: Token,
+    owner: Address,
   });
 
   init();
@@ -460,6 +429,7 @@ export const dispenser = Reach.App(() => {
     check(this == mCtcAddr);
   });
   check(this == mCtcAddr);
+  v.owner.set(owner);
   k1(nft);
 
   commit();
