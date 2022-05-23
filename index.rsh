@@ -177,7 +177,7 @@ export const machine = Reach.App(() => {
           chkRows();
           const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
-          const maxIndex = nonTakenLngth - 1;
+          const maxIndex = nonTakenLngth;
           check(rowIndex <= maxIndex, 'row array bounds check');
           const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
           return () => {
