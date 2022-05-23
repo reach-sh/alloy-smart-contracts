@@ -2,8 +2,8 @@
 'use strict';
 
 const NFT_COST = 1;
-const NUM_OF_ROWS = 3;
-const NUM_OF_ROW_ITEMS = 3;
+const NUM_OF_ROWS = 5;
+const NUM_OF_ROW_ITEMS = 12;
 
 // dispenser interface to be shared across both contracts
 const dispenserI = {
@@ -108,23 +108,29 @@ export const machine = Reach.App(() => {
         view.totToksTkn.set(totToksTkn);
         view.loadedRows.set(loadedRows);
         view.emptyRows.set(emptyRows);
-        // TODO - Jay recommends XORing these before running the digest function.  But there are 3 types here (uint, int, digest) that don't support being XORed together.
-        // const getRNum = (N) => digest(N^ R, thisConsensusTime(), thisConsensusSecs())
-
-        // this would not compile when using thisConsensusTime() and thisConsensusSecs()
-        // hence the "lastConsensus" things instead
-        const getRNum = N =>
-          digest(N, R, lastConsensusTime(), lastConsensusSecs());
+        const defState = () => [
+          R,
+          totToksTkn,
+          rowArr,
+          loadedRows,
+          emptyRows,
+          createdRows,
+          keepGoing,
+        ];
+        const getRNum = rNum => {
+          const n = digest(rNum, thisConsensusTime(), thisConsensusSecs());
+          return R ^ n;
+        };
         const chkRows = () => {
           check(loadedRows > 0, 'at least one row loaded');
           check(loadedRows > emptyRows, 'all rows are empty');
           check(loadedRows <= rowArr.length, 'has loaded rowArr');
         };
         const getIfrmArr = (arr, i, sz, t) => {
+          const defI = Maybe(t).None();
           const k = sz == 0 ? 0 : sz - 1;
           const ip = i % sz;
           const item = arr[ip];
-          const defI = Maybe(t).None();
           const newArr = Array.set(arr, ip, arr[k]);
           const nullEndArr = Array.set(newArr, k, defI);
           return [item, nullEndArr];
@@ -171,10 +177,9 @@ export const machine = Reach.App(() => {
           chkRows();
           const nonTakenLngth = loadedRows - emptyRows;
           const rowIndex = rN % nonTakenLngth;
-          const maxIndex = nonTakenLngth;
+          const maxIndex = nonTakenLngth - 1;
           check(rowIndex <= maxIndex, 'row array bounds check');
           const [row, _] = getIfrmArr(rowArr, rowIndex, maxIndex, Address);
-          check(isSome(row), 'check row is valid')
           return () => {
             delete UsersCtcs[user];
             Users[user] = {
@@ -215,7 +220,6 @@ export const machine = Reach.App(() => {
             maxIndex,
             Contract
           );
-          check(isSome(slot), 'check slot is valid')
           return () => {
             Users[usr] = {
               ...user,
@@ -254,21 +258,21 @@ export const machine = Reach.App(() => {
           const rN = getRNum(rNum);
           const user = Users[u];
           const sUser = fromSome(user, defUser);
-          check(sUser.lastCompletedStep == 1, 'user has inserted token')
-          check(isSome(sUser.row), 'user has row')
+          check(sUser.lastCompletedStep == 1, 'user has inserted token');
+          check(isSome(sUser.row), 'user has row');
           check(isNone(sUser.nftContract), 'user not assigned contract');
-          check(totToksTkn > 0, 'there are no tokens taken')
+          check(totToksTkn > 0, 'there are no tokens taken');
           const sUsrRow = fromSome(sUser.row, Machine);
-          const rowData = fromSome(Rows[sUsrRow], defRow)
+          const rowData = fromSome(Rows[sUsrRow], defRow);
           const { rowToksTkn, loadedCtcs } = rowData;
           const isRowEmpty = rowToksTkn == loadedCtcs;
           check(isRowEmpty, 'row is not empty');
           return () => {
-            transfer([0, [NFT_COST, payToken]]).to(u)
+            transfer([0, [NFT_COST, payToken]]).to(u);
             delete Users[u];
-            return rN
-          }
-        }
+            return rN;
+          };
+        };
       })
       .invariant(
         balance() === 0 &&
@@ -325,17 +329,23 @@ export const machine = Reach.App(() => {
         },
         _ => handlePmt(NFT_COST),
         (rNum, notify) => {
-          const [assignedRow, rN] = insertToken(this, rNum)();
-          notify(assignedRow);
-          return [
-            rN,
-            totToksTkn + 1,
-            rowArr,
-            loadedRows,
-            emptyRows,
-            createdRows,
-            true,
-          ];
+          try {
+            const [assignedRow, rN] = insertToken(this, rNum)();
+            if (assignedRow === Machine) throw 1;
+            notify(assignedRow);
+            return [
+              rN,
+              totToksTkn + 1,
+              rowArr,
+              loadedRows,
+              emptyRows,
+              createdRows,
+              true,
+            ];
+          } catch (_) {
+            transfer([0, [NFT_COST, payToken]]).to(this);
+            return defState();
+          }
         }
       )
       .api(
@@ -345,9 +355,14 @@ export const machine = Reach.App(() => {
         },
         _ => handlePmt(0),
         (rNum, notify) => {
-          const [rowForUsr, nArr, eRows, rN] = turnCrank(this, rNum)();
-          notify(rowForUsr);
-          return [rN, totToksTkn, nArr, loadedRows, eRows, createdRows, true];
+          try {
+            const [rowForUsr, nArr, eRows, rN] = turnCrank(this, rNum)();
+            if (rowForUsr === thisContract) throw 1;
+            notify(rowForUsr);
+            return [rN, totToksTkn, nArr, loadedRows, eRows, createdRows, true];
+          } catch (_) {
+            return defState();
+          }
         }
       )
       .api(
@@ -378,7 +393,7 @@ export const machine = Reach.App(() => {
         _ => handlePmt(0),
         (rNum, notify) => {
           const rN = reset(rNum, this)();
-          notify(null)
+          notify(null);
           return [
             rN,
             totToksTkn - 1,
