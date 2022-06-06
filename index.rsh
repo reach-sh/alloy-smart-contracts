@@ -3,8 +3,8 @@
 
 const NFT_COST = 1;
 
-const NUM_OF_ROWS = 100;
-const NUM_OF_ROW_ITEMS = 65;
+const NUM_OF_ROWS = 10; // 100
+const NUM_OF_ROW_ITEMS = 10; // 65
 
 // dispenser interface to be shared across both contracts
 const dispenserI = {

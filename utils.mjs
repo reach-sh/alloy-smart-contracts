@@ -50,17 +50,6 @@ export const createMockNFTs = async (acc, amt) => {
   return res.map(r => r.id);
 };
 
-// export const createMockNFTs = async (acc, amt) => {
-//   const tokensToMint = Array(amt).fill(null);
-//   const pms = tokensToMint.map((_, i) =>
-//     launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`, {
-//       decimals: 0,
-//     })
-//   );
-//   const res = await Promise.all(pms);
-//   return res.map(r => r.id);
-// };
-
 //create NFT contract
 export const createNftCtcs = (acc, nftIds) =>
   nftIds.map(nftId => ({
@@ -91,17 +80,6 @@ export const deployBulkCtcs = async (nftHs, machineAddr) => {
   await untilDone;
   return ctcAddress;
 };
-
-// export const deployBulkCtcs = async (nftCtcs, machineAddr) =>
-//   await Promise.all(
-//     nftCtcs.map(nft =>
-//       nft.ctc.p.Dispenser({
-//         ready: stdlib.disconnect,
-//         nft: nft.nftId,
-//         mCtcAddr: machineAddr,
-//       })
-//     )
-//   );
 
 export const askForNumber = async (msg, max) => {
   let r;
@@ -205,10 +183,10 @@ export const loadRow = async fmtCtcInfo => {
   const fmtNftIds = slicedAssets.map(assId => stdlib.bigNumberify(assId));
   const nftCtcs = createNftCtcs(acc, fmtNftIds);
   console.log('Deploying NFT contracts...');
-  // const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
-  // console.log('Loading Rows...');
-  // const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
-  // await Promise.all(pms);
+  const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
+  console.log('Loading Rows...');
+  const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
+  await Promise.all(pms);
   return true;
 };
 
