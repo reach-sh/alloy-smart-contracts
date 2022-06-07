@@ -24,6 +24,12 @@ export const getTokBal = async (acc, tok) => {
   return balA;
 };
 
+export const createRowAccounts = async amt => {
+  const accountsToMake = Array(amt).fill(null);
+  const pms = accountsToMake.map(_ => stdlib.createAccount());
+  return await Promise.all(pms);
+};
+
 // starting balance
 export const bal = stdlib.parseCurrency(1000);
 
@@ -87,7 +93,7 @@ export const askForNumber = async (msg, max) => {
     const howMany = await ask.ask(msg);
     if (isNaN(howMany) || Number(howMany) > max || Number(howMany) <= 0) {
       console.log(
-        '* Please enter an integer that is greater than 0 and less than 3.'
+        `* Please enter an integer that is greater than 0 and less than ${max}.`
       );
     } else {
       r = Number(howMany);
@@ -98,6 +104,8 @@ export const askForNumber = async (msg, max) => {
 
 export const deployMachine = async (ctcMachine, payTokenId) => {
   console.log('deploying machine contract...');
+  let fmtRowNum;
+  let fmtSlotNum;
   try {
     await ctcMachine.p.Machine({
       payToken: payTokenId,
@@ -114,8 +122,8 @@ export const deployMachine = async (ctcMachine, payTokenId) => {
         numOfRows(),
         numOfSlots(),
       ]);
-      const fmtRowNum = fmtNum(rawRowNum[1]);
-      const fmtSlotNum = fmtNum(rawSlotNum[1]);
+      fmtRowNum = fmtNum(rawRowNum[1]);
+      fmtSlotNum = fmtNum(rawSlotNum[1]);
       console.log('');
       console.log('Number of available rows to fill:', fmtRowNum);
       console.log('Number of available slots per row:', fmtSlotNum);
@@ -136,16 +144,21 @@ export const deployMachine = async (ctcMachine, payTokenId) => {
   console.log('*******************************************');
   console.log('');
 
-  return { mCtcInfo, machineAddr, payTokenId };
+  return {
+    mCtcInfo,
+    machineAddr,
+    payTokenId,
+    numOfRows: fmtRowNum,
+    numOfSlots: fmtSlotNum,
+  };
 };
 
 export async function getAccountAssets(addr, user) {
   const accountResp = await fetch(`${INDEXER_URL}/accounts/${addr}`);
   const { account } = await accountResp.json();
-  const key = user ? 'assets' : 'created-assets';
-  const assets = account[key];
-  let nfts = assets;
-  return nfts;
+  const assets = account['assets'];
+  const createdAssets = account['created-assets'];
+  return { assets, createdAssets };
 }
 
 export const getAccFromMnemonic = async (
@@ -157,35 +170,17 @@ export const getAccFromMnemonic = async (
   return acc;
 };
 
-export const createRow = async mCtcInfo => {
-  const acc = await getAccFromMnemonic(
-    'Please paste the mnemonic of row owner:'
-  );
-  const ctcMachine = acc.contract(machineBackend, mCtcInfo);
+export const createRow = async (rowAcc, mCtcInfo, machineAcc) => {
+  const ctcMachine = rowAcc.contract(machineBackend, mCtcInfo);
   const { createRow: ctcCreateRow } = ctcMachine.a;
   const [_, numOfCreatedRows] = await ctcCreateRow();
   const fmtRn = fmtNum(numOfCreatedRows);
   console.log('Created row:', fmtRn);
 };
 
-export const loadRow = async fmtCtcInfo => {
-  const acc = await getAccFromMnemonic(
-    'Please paste the mnemonic of row owner:'
-  );
+export const loadRow = async (acc, nftCtcs, fmtCtcInfo) => {
   const ctcMachine = acc.contract(machineBackend, fmtCtcInfo);
-  const machineAddress = await ctcMachine.getContractAddress();
-  const machineAddr = fmtAddr(machineAddress);
-  const accAddr = acc.networkAccount.addr;
-  console.log('Getting accounts NFTs...');
-  const createdAssets = await getAccountAssets(accAddr);
-  const createdAssetIds = createdAssets.map(ass => ass.index);
-  const slicedAssets = createdAssetIds.slice(0, 40);
-  const fmtNftIds = slicedAssets.map(assId => stdlib.bigNumberify(assId));
-  const nftCtcs = createNftCtcs(acc, fmtNftIds);
-  console.log('Deploying NFT contracts...');
-  const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
-  console.log('Loading Rows...');
-  const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
+  const pms = nftCtcs.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
   await Promise.all(pms);
   return true;
 };
