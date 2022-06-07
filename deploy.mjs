@@ -132,6 +132,8 @@ rowAccs.forEach((acc, i) => {
 await Promise.all(loadPms);
 
 console.log('');
-console.log('Machine Ready!');
+console.log(`Machine Ready!`);
+console.log(`Application id: ${ctcInfo}`);
+console.log('')
 
 process.exit(0);
