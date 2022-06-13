@@ -3,7 +3,6 @@ import * as machineBackend from './build/index.machine.mjs';
 import {
   deployMachine,
   getAccFromMnemonic,
-  askForNumber,
   loadRow,
   createRow,
   launchPayToken,
@@ -109,7 +108,6 @@ const transferAlgoPms = rowAccs.map(rowAcc =>
 );
 await Promise.all(transferAlgoPms);
 
-console.log('deploying NFT contracts...')
 const nftCtcs = createNftCtcs(accMachine, fmtNFTIds);
 const deployedCtcs = await deployBulkCtcs(nftCtcs, machineAddress);
 
