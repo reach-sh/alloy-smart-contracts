@@ -35,6 +35,7 @@ export const bal = stdlib.parseCurrency(1000);
 
 // create the NFT's/tokens
 export const createMockNFTs = async (acc, amt) => {
+  console.log('creating nfts...')
   let p;
   const tokens = [];
   const untilDone = new Promise((resolve, reject) => {
@@ -65,6 +66,7 @@ export const createNftCtcs = (acc, nftIds) =>
 
 // deploy NFT contracts to consensus network
 export const deployBulkCtcs = async (nftHs, machineAddr) => {
+  console.log(`deploying ${nftHs.length} NFT contracts...`);
   let p;
   const ctcAddress = [];
   const untilDone = new Promise((resolve, reject) => {
@@ -153,7 +155,7 @@ export const deployMachine = async (ctcMachine, payTokenId) => {
   };
 };
 
-export async function getAccountAssets(addr, user) {
+export async function getAccountAssets(addr) {
   const accountResp = await fetch(`${INDEXER_URL}/accounts/${addr}`);
   const { account } = await accountResp.json();
   const assets = account['assets'];
@@ -186,7 +188,7 @@ export const loadRow = async (acc, nftCtcs, fmtCtcInfo) => {
 };
 
 export const launchPayToken = async accMachine => {
-  console.log('Launching pay token...');
+  console.log('minting pay token...');
   const { id: nPayTokenId } = await launchToken(
     accMachine,
     'Reach Thank You',
