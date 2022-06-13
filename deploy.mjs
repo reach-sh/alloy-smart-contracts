@@ -1,243 +1,137 @@
-import { loadStdlib, ask } from '@reach-sh/stdlib';
+import { ask } from '@reach-sh/stdlib';
 import * as machineBackend from './build/index.machine.mjs';
-import * as dispenserBackend from './build/index.dispenser.mjs';
+import {
+  deployMachine,
+  getAccFromMnemonic,
+  loadRow,
+  createRow,
+  launchPayToken,
+  createRowAccounts,
+  fmtNum,
+  getAccountAssets,
+  stdlib,
+  deployBulkCtcs,
+  createNftCtcs,
+} from './utils.mjs';
 
-const NETWORK = 'ALGO';
-const PROVIDER = 'TestNet';
+const MIN_ACC_BAL = 1600000;
 
-const stdlib = loadStdlib(NETWORK);
-stdlib.setProviderByName(PROVIDER);
-const { launchToken } = stdlib;
+let ctcInfo;
+let payTokenId;
+let rowCount;
+let slotCount;
+let accMachine;
+let machineAddress;
 
-const createNFts = async (acc, amt) => {
-  const pms = Array(amt)
-    .fill(null)
-    .map((_, i) =>
-      launchToken(acc, `Cool NFT | edition ${i}`, `NFT${i}`, { decimals: 0 })
-    );
-  const res = await Promise.all(pms);
-  return res.map(r => r.id);
-};
-
-const getRandomNum = (max = 100) => Math.floor(Math.random() * max);
-const getRandomBigInt = () => stdlib.bigNumberify(getRandomNum());
-const fmtNum = n => stdlib.bigNumberToNumber(n);
-const fmtAddr = addr => stdlib.formatAddress(addr);
-
-const askForNumber = async (msg, max) => {
-  let r;
-  while (!r || r > max || r <= 0) {
-    const howMany = await ask.ask(msg);
-    if (isNaN(howMany) || Number(howMany) > max || Number(howMany) <= 0) {
-      console.log(
-        '* Please enter an integer that is greater than 0 and less than 3.'
-      );
-    } else {
-      r = Number(howMany);
-    }
-  }
-  return r;
-};
-
-const createRow = async mCtcInfo => {
-  const mnemonic = await ask.ask(
-    'Please paste the mnemonic an account to own the row:'
-  );
-  const fmtMnemonic = mnemonic.replace(/,/g, '');
-  const acc = await stdlib.newAccountFromMnemonic(fmtMnemonic);
-  const ctcMachine = acc.contract(machineBackend, mCtcInfo);
-  const { createRow: ctcCreateRow } = ctcMachine.a;
-  const [_, numOfCreatedRows] = await ctcCreateRow();
-  const fmtRn = fmtNum(numOfCreatedRows);
-  console.log('Created row:', fmtRn);
-};
-
-//create NFT contract
-const createNftCtcs = (acc, nftIds) =>
-  nftIds.map(nftId => ({
-    nftId,
-    ctc: acc.contract(dispenserBackend),
-  }));
-
-const deployNftCtcs = async (nftHs, machineAddr) => {
-  const ctcAddress = [];
-  const deploy = nft =>
-    new Promise((res, rej) => {
-      nft.ctc.p.Dispenser({
-        ready: ctc => {
-          ctcAddress.push(ctc);
-          res();
-        },
-        nft: nft.nftId,
-        mCtcAddr: machineAddr,
-      });
-    });
-  for (const nftCtc of nftHs) {
-    await deploy(nftCtc);
-  }
-  return ctcAddress;
-};
-
-const loadRow_ = async (info, machineAddr) => {
-  const mnemonic = await ask.ask(
-    'Please paste the mnemonic of a row owner account:'
-  );
-  const fmtMnemonic = mnemonic.replace(/,/g, '');
-  const acc = await stdlib.newAccountFromMnemonic(fmtMnemonic);
-  // TODO: change this to take the NFT's from the account or pasted in NFT ID's
-  // for rapid testing on testnet
-  const fmtNftIds = await createNFts(acc, 60);
-  const ctcMachine = acc.contract(machineBackend, info);
-  const nftCtcs = createNftCtcs(acc, fmtNftIds);
-  console.log('Deploying NFT contracts...');
-  const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
-  console.log('Loading Rows...');
-  const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
-  await Promise.all(pms)
-  return true;
-};
-
-// 86406489
-const existingMachine = await ask.ask(
-  'Do you want to load an existing machine?',
+const shouldCreateNewMachine = await ask.ask(
+  'Do you want to create a new machine?',
   ask.yesno
 );
-if (existingMachine) {
-  const existingMachine = await ask.ask('Please enter the machine ctc info:');
-  const fmtCtcInfo = parseInt(existingMachine, 10);
-  const shouldCreateRow = await ask.ask(
-    'Do you want to create a row?',
+
+if (!shouldCreateNewMachine) {
+  const machCtcInfo = await ask.ask('Please enter the machine ctc info:');
+  accMachine = await getAccFromMnemonic(
+    'Please paste the mnemonic of who the machine owner:'
+  );
+  ctcInfo = parseInt(machCtcInfo, 10);
+  const ctcMachine = accMachine.contract(machineBackend, ctcInfo);
+  const { views } = ctcMachine;
+  const rawRowCount = await views.numOfRows();
+  const rawSlotCount = await views.numOfSlots();
+  const numOfRows = fmtNum(rawRowCount[1]);
+  const numOfSlots = fmtNum(rawSlotCount[1]);
+  rowCount = numOfRows;
+  slotCount = numOfSlots;
+} else {
+  console.log('OK. We will create a new machine. Please follow the promps.');
+  accMachine = await getAccFromMnemonic(
+    'Please paste the mnemonic of who the machine owner will be:'
+  );
+  const willProvidePayToken = await ask.ask(
+    'Do you want to provide your own pay token:',
     ask.yesno
   );
+  if (willProvidePayToken) {
+    const ePayTokenId = await ask.ask('Please paste desired pay token id:');
+    payTokenId = Number(ePayTokenId);
+  } else {
+    payTokenId = await launchPayToken(accMachine);
+  }
+  const ctcMachine = accMachine.contract(machineBackend);
+  const {
+    mCtcInfo,
+    payTokenId: newPayTokId,
+    numOfRows,
+    numOfSlots,
+    machineAddr,
+  } = await deployMachine(ctcMachine, payTokenId);
 
-  let howManyRows;
-  if (shouldCreateRow) {
-    const numOfRows = await askForNumber(
-      'How many rows fo you want to create?',
-      3
+  ctcInfo = parseInt(`${mCtcInfo}`, 10);
+  payTokenId = newPayTokId;
+  rowCount = numOfRows;
+  slotCount = numOfSlots;
+  machineAddress = machineAddr;
+}
+
+const accAddr = accMachine.networkAccount.addr;
+const { createdAssets, assets } = await getAccountAssets(accAddr);
+const createdAssetsWithBals = createdAssets.filter(ca => {
+  const foundAss = assets.find(ass => ass['asset-id'] === ca.index);
+  return foundAss && foundAss.amount > 0;
+});
+const nftIds = createdAssetsWithBals.map(ass => ass.index);
+const fmtNFTIds = nftIds.map(assId => stdlib.bigNumberify(assId));
+
+const numOfNftsToLoad = nftIds.length;
+const rawRowsNeeded = numOfNftsToLoad / slotCount;
+const needsAdditionalRow = rawRowsNeeded % slotCount !== 0;
+let numRowsNeeded = needsAdditionalRow
+  ? Math.floor(rawRowsNeeded) + 1
+  : Math.floor(rawRowsNeeded);
+if (numRowsNeeded > rowCount) {
+  numRowsNeeded = rowCount;
+  console.log('');
+  console.log(
+    `** Found ${numOfNftsToLoad} assets in this account. The max you can load is ${
+      rowCount * slotCount
+    } **`
+  );
+  console.log('');
+}
+const shouldLoad = await ask.ask(`Continue with loading?`, ask.yesno);
+if (!shouldLoad) process.exit(0);
+
+console.log('Funding row accounts...')
+const rowAccs = await createRowAccounts(numRowsNeeded);
+const transferAlgoPms = rowAccs.map(rowAcc =>
+  stdlib.transfer(accMachine, rowAcc, MIN_ACC_BAL)
+);
+await Promise.all(transferAlgoPms);
+
+const nftCtcs = createNftCtcs(accMachine, fmtNFTIds);
+const deployedCtcs = await deployBulkCtcs(nftCtcs, machineAddress);
+
+console.log('creating rows...')
+const rowPms = rowAccs.map(acc => createRow(acc, ctcInfo));
+await Promise.all(rowPms);
+
+console.log('loading rows...')
+const loadPms = [];
+rowAccs.forEach((acc, i) => {
+  setTimeout(function () {
+    const itemsForRow = deployedCtcs.slice(
+      i * slotCount,
+      i * slotCount + slotCount
     );
-    howManyRows = numOfRows;
-  }
-  let createdRows = 0;
-  while (createdRows < howManyRows) {
-    await createRow(fmtCtcInfo);
-    createdRows++;
-  }
-
-  const shouldLoadRow = await ask.ask('Do you want to load a row?', ask.yesno);
-  const machineAddress = await ask.ask(
-    'Please enter the machine contract address (This will be an account address like FQWWCUXF2U4BROTZUQQE...)'
-  );
-  if (shouldLoadRow) {
-    const isRowLoaded = await loadRow_(fmtCtcInfo, machineAddress);
-    if (isRowLoaded) console.log('Row Loaded Successfully!');
-    process.exit(0);
-  } else {
-    process.exit(0);
-  }
-} else {
-  console.log('');
-  console.log('OK. We will create a new machine. Please follow the promps.');
-}
-
-const mnemonic = await ask.ask('Please paste your mnemonic:');
-const fmtMnemonic = mnemonic.replace(/,/g, '');
-
-const accMachine = await stdlib.newAccountFromMnemonic(fmtMnemonic);
-const ctcMachine = accMachine.contract(machineBackend);
-
-const willProvidePayToken = await ask.ask(
-  'Do you want to provide your own pay token?',
-  ask.yesno
-);
-let payTokenId;
-if (willProvidePayToken) {
-  const ePayTokenId = await ask.ask('Please paste desired pay token id:');
-  payTokenId = Number(ePayTokenId);
-} else {
-  // create pay token
-  console.log('');
-  console.log('Launching pay token...');
-  const { id: nPayTokenId } = await launchToken(
-    accMachine,
-    'Reach Thank You',
-    'RTYT',
-    { decimals: 0 }
-  );
-  payTokenId = fmtNum(nPayTokenId);
-}
-// deploy contract
-let maxNumberOfRows;
-let maxNumberOfRowSlots;
-console.log('Deploying machine contract...');
-try {
-  await ctcMachine.p.Machine({
-    payToken: stdlib.bigNumberify(payTokenId),
-    ready: x => {
-      throw { x };
-    },
-  });
-  throw new Error('impossible');
-} catch (e) {
-  if ('x' in e) {
-    const { v: views } = ctcMachine;
-    const { numOfRows, numOfSlots } = views;
-    const [rawRowNum, rawSlotNum] = await Promise.all([
-      numOfRows(),
-      numOfSlots(),
-    ]);
-    const fmtRowNum = fmtNum(rawRowNum[1]);
-    const fmtSlotNum = fmtNum(rawSlotNum[1]);
-    maxNumberOfRows = fmtRowNum;
-    maxNumberOfRowSlots = fmtSlotNum;
-    console.log('');
-    console.log('Number of available rows to fill:', fmtRowNum);
-    console.log('Number of available slots per row:', fmtSlotNum);
-    console.log('');
-  } else {
-    throw e;
-  }
-}
-const mCtcInfo = await ctcMachine.getInfo();
-const rawMachineAddr = await ctcMachine.getContractAddress();
-const machineAddr = fmtAddr(rawMachineAddr);
+    const p = loadRow(acc, itemsForRow, ctcInfo);
+    loadPms.push(p);
+  }, i * 250);
+});
+await Promise.all(loadPms);
 
 console.log('');
-console.log('*******************************************');
-console.log('Pay token id:', payTokenId);
-console.log('Machine contract info:', fmtNum(mCtcInfo));
-console.log('Machine contract address:', machineAddr);
-console.log('*******************************************');
-console.log('');
-
-const shouldCreateRow = await ask.ask(
-  'Do you want to create a row?',
-  ask.yesno
-);
-let howManyRows;
-if (shouldCreateRow) {
-  const numOfRows = await askForNumber(
-    'How many rows fo you want to create?',
-    maxNumberOfRows
-  );
-  howManyRows = numOfRows;
-} else {
-  process.exit(0);
-}
-
-let createdRows = 0;
-while (createdRows < howManyRows) {
-  await createRow(mCtcInfo);
-  createdRows++;
-}
-const shouldLoadRow = await ask.ask('Do you want to load a row?', ask.yesno);
-if (shouldLoadRow) {
-  const isRowLoaded = await loadRow_(mCtcInfo, machineAddr);
-  if (isRowLoaded) {
-    console.log('Row Loaded Successfully!');
-  } else {
-    console.error('Row was not completely loaded');
-  }
-}
+console.log(`Machine Ready!`);
+console.log(`Application id: ${ctcInfo}`);
+console.log('')
 
 process.exit(0);

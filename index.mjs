@@ -3,7 +3,7 @@ import * as machineBackend from './build/index.machine.mjs';
 import * as dispenserBackend from './build/index.dispenser.mjs';
 import { startTests, describe } from './test-utils.mjs';
 
-export const stdlib = loadStdlib('ALGO-devnet');
+export const stdlib = loadStdlib('ALGO');
 const { launchToken } = stdlib;
 
 export const fmtAddr = addr => stdlib.formatAddress(addr);
@@ -79,6 +79,7 @@ const loadRow = async (machineAddr, info, acc, views) => {
   const nfts = await createNFts(acc, slots);
   const nftCtcs = createNftCtcs(acc, nfts);
   const nftCtcAdds = await deployNftCtcs(nftCtcs, machineAddr);
+  console.log('nftCtcAdds', nftCtcAdds);
   const pms = nftCtcAdds.map(c => ctcMachine.a.loadRow(c, getRandomBigInt()));
   await Promise.all(pms);
   return true;
