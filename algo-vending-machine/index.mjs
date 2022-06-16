@@ -43,7 +43,6 @@ const getPackForAcc = async (acc, ctcInfo) => {
 };
 
 let apis;
-let ctcViews;
 // deploy contract
 try {
   await ctcMachine.p.Deployer({
@@ -56,14 +55,12 @@ try {
   if ('x' in e) {
     console.log('Deployed!');
     const { a, v } = ctcMachine;
-    ctcViews = await fmtViews(v);
     apis = a;
   } else {
     throw e;
   }
 }
 
-const { packTok } = ctcViews;
 const ctcInfo = await ctcMachine.getInfo();
 
 for (const acc of userAccs) {
