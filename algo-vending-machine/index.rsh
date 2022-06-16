@@ -43,7 +43,11 @@ export const vendingMachine = Reach.App(() => {
     .paySpec([])
     .while(true)
     .define(() => {
-      const getNewPackCost = () => pow(tokSupply + SUPPLY_INCREMENT, 2, 10);
+      const getNewPackCost = () => {
+        const newSupply = tokSupply + SUPPLY_INCREMENT;
+        const newCost = pow(newSupply, 2, 10);
+        return [newSupply, newCost];
+      };
       const sendPackTok = user => transfer([0, [1, packTok]]).to(user);
     })
     .api_(api.getPack, () => {
@@ -52,13 +56,9 @@ export const vendingMachine = Reach.App(() => {
         [costOfPack],
         k => {
           sendPackTok(this);
-          const updatedPackCost = getNewPackCost();
+          const [newSupply, updatedPackCost] = getNewPackCost();
           k(tokSupply);
-          return [
-            totalSpent + costOfPack,
-            updatedPackCost,
-            tokSupply + SUPPLY_INCREMENT,
-          ];
+          return [totalSpent + costOfPack, updatedPackCost, newSupply];
         },
       ];
     });
