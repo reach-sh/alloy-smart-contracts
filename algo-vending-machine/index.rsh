@@ -60,7 +60,7 @@ export const vendingMachine = Reach.App(() => {
     .define(() => {
       const getNewPackCost = () => {
         const newSupply = tokSupply + 1;
-        // ax^2 + bx + c
+        // bonding curve - ax^2 + bx + c
         const newCost =
           pow(mul(newSupply, PRICE_INCREASE_MULTIPLE), 2, 10) +
           mul(2, newSupply) +
