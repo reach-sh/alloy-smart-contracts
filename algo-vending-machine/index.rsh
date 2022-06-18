@@ -75,7 +75,7 @@ export const vendingMachine = Reach.App(() => {
     })
     .api_(api.load, (rNum, amt) => {
       check(this === Deployer, 'is loader deployer');
-      check(amt <= UInt.max, 'amount is in bounds');
+      check(balance(nft) + amt <= UInt.max, 'amount is in bounds');
       return [
         handleLoad(amt),
         notify => {
