@@ -1,7 +1,7 @@
 import { loadStdlib } from '@reach-sh/stdlib';
 import * as vendingMachineBackend from './build/index.vendingMachine.mjs';
 
-const AMT_TO_BUY = 5;
+const AMT_TO_BUY = 1;
 
 const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
@@ -37,26 +37,30 @@ const fmtViews = async rawViews => {
 };
 
 const handleBuyPack = async acc => {
+  const packBalA = await acc.balanceOf(packTok);
+  const fmtBalA = fmtNum(packBalA);
+  console.log('pack balance before buying:', fmtBalA);
   const rNum = getRandomBigInt();
   const ctcUser = acc.contract(vendingMachineBackend, ctcInfo);
-  const { v } = ctcUser;
-  const views = await fmtViews(v);
-  const { packCost, packTokSupply, paidAmt } = views;
   await acc.tokenAccept(packTok);
   const { buyPack } = ctcUser.a;
-  console.log({
-    currentCost: `${packCost} ALGO`,
-    currentSupply: packTokSupply,
-    contractBalance: `${paidAmt} ALGO`,
-  });
-  return buyPack(rNum);
+  await buyPack(rNum);
+  const packBalB = await acc.balanceOf(packTok);
+  const fmtBalB = fmtNum(packBalB);
+  console.log('pack balance after buying:', fmtBalB);
 };
 
 const handleOpenPack = async acc => {
+  const packBalA = await acc.balanceOf(packTok);
+  const fmtBalA = fmtNum(packBalA);
+  console.log('pack balance before opening:', fmtBalA);
   const rNum = getRandomBigInt();
   const ctcUser = acc.contract(vendingMachineBackend, ctcInfo);
   const { openPack } = ctcUser.a;
   const pointsFromPack = await openPack(rNum);
+  const packBalB = await acc.balanceOf(packTok);
+  const fmtBalB = fmtNum(packBalB);
+  console.log('pack balance after opening:', fmtBalB);
   const fmtPoints = fmtNum(pointsFromPack);
   console.log(`Pack contained ${fmtPoints} points!`);
 };
