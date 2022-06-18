@@ -21,21 +21,6 @@ const ctcMachine = accDeployer.contract(vendingMachineBackend);
 
 let ctcInfo, packTok, NFT;
 
-const fmtViews = async rawViews => {
-  const { costOfPack, packTokSupply, howMuchPaid } = rawViews;
-  const [_rawCost, rawCost] = await costOfPack();
-  const [_rawPackTokSupply, rawPackTokSupply] = await packTokSupply();
-  const [_howMuch, rawHowMuch] = await howMuchPaid();
-  const fmtPackCost = stdlib.formatCurrency(rawCost);
-  const fmtPaidAmt = stdlib.formatCurrency(rawHowMuch);
-  const fmtPackTokSupply = fmtNum(rawPackTokSupply);
-  return {
-    packCost: fmtPackCost,
-    packTokSupply: fmtPackTokSupply,
-    paidAmt: fmtPaidAmt,
-  };
-};
-
 const handleBuyPack = async acc => {
   const packBalA = await acc.balanceOf(packTok);
   const fmtBalA = fmtNum(packBalA);
@@ -94,10 +79,17 @@ const handleLoad = async () => {
 };
 
 const handleCrank = async acc => {
+  const nftBalA = await acc.balanceOf(NFT);
+  const fmtNftBalA = fmtNum(nftBalA);
+  console.log('NFT balance before cranking:', fmtNftBalA);
+  await acc.tokenAccept(NFT)
   const rNum = getRandomBigInt();
   const ctcUser = acc.contract(vendingMachineBackend, ctcInfo);
   const { crank } = ctcUser.a;
   const nftReceived = await crank(rNum);
+  const nftBalB = await acc.balanceOf(NFT);
+  const fmtNftBalB = fmtNum(nftBalB);
+  console.log('NFT balance after cranking:', fmtNftBalB);
   const fmtNFT = fmtNum(nftReceived);
   console.log(`NFT Received: ${fmtNFT}`);
 };

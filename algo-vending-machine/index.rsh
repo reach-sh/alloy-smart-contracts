@@ -145,9 +145,11 @@ export const vendingMachine = Reach.App(() => {
       const exchangePoints = user => {
         const currentPoints = fromSome(Users[user], 0);
         Users[user] = currentPoints - 1;
+        transfer(1, nft).to(user)
       };
     })
     .api_(api.crank, rNum => {
+      check(balance(nft) > 0, 'NFT is available');
       check(isSome(Users[this]), 'user exists');
       check(fromSome(Users[this], 0) > 0, 'user has points');
       return [
