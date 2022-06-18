@@ -55,7 +55,7 @@ const checkPoints = async acc => {
   const { getUser } = ctcUser.v;
   const [_rawUser, rawUserPoints] = await getUser(acc.networkAccount.addr);
   const fmtUserPoints = fmtNum(rawUserPoints);
-  console.log({ points: fmtUserPoints });
+  console.log(`${acc.networkAccount.addr}: ${fmtUserPoints} Points`);
 };
 
 const transferPack = async () => {
@@ -67,7 +67,6 @@ const transferPack = async () => {
   await stdlib.transfer(sender, receiver, 1, packTok);
   await handleOpenPack(receiver);
   console.log('Pack transfered!');
-  checkPoints(receiver);
 };
 
 const handleLoad = async () => {
@@ -82,16 +81,16 @@ const handleCrank = async acc => {
   const nftBalA = await acc.balanceOf(NFT);
   const fmtNftBalA = fmtNum(nftBalA);
   console.log('NFT balance before cranking:', fmtNftBalA);
+  await checkPoints(acc);
   await acc.tokenAccept(NFT)
   const rNum = getRandomBigInt();
   const ctcUser = acc.contract(vendingMachineBackend, ctcInfo);
   const { crank } = ctcUser.a;
-  const nftReceived = await crank(rNum);
+  await crank(rNum);
   const nftBalB = await acc.balanceOf(NFT);
   const fmtNftBalB = fmtNum(nftBalB);
   console.log('NFT balance after cranking:', fmtNftBalB);
-  const fmtNFT = fmtNum(nftReceived);
-  console.log(`NFT Received: ${fmtNFT}`);
+  await checkPoints(acc);
 };
 
 const { id: nftId } = await createNFT(accDeployer);
@@ -116,7 +115,6 @@ await handleLoad();
 for (const acc of userAccs) {
   await handleBuyPack(acc);
   await handleOpenPack(acc);
-  await checkPoints(acc);
   await handleCrank(acc);
 }
 
