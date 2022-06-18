@@ -6,13 +6,18 @@ const STARTING_PACK_COST = 100;
 const PRICE_INCREASE_MULTIPLE = 100;
 const MAX_POINTS_IN_PACK = 10;
 
+const R_NUM = UInt;
+
 export const vendingMachine = Reach.App(() => {
   const Deployer = Participant('Deployer', {
     ready: Fun([], Null),
+    NFT: Token,
   });
   const api = API({
-    buyPack: Fun([UInt], UInt),
-    openPack: Fun([UInt], UInt),
+    load: Fun([R_NUM, UInt], Null),
+    buyPack: Fun([R_NUM], UInt),
+    openPack: Fun([R_NUM], UInt),
+    crank: Fun([R_NUM], Token),
   });
   const view = View({
     packTok: Token,
@@ -20,10 +25,14 @@ export const vendingMachine = Reach.App(() => {
     packTokSupply: UInt,
     howMuchPaid: UInt,
     getUser: Fun([Address], UInt),
+    NFT: Token,
   });
 
   init();
-  Deployer.publish();
+  Deployer.only(() => {
+    const nft = declassify(interact.NFT);
+  });
+  Deployer.publish(nft);
 
   const packTok = new Token({
     name: 'Pack Token1111111111111111111111',
@@ -31,12 +40,16 @@ export const vendingMachine = Reach.App(() => {
     supply: UInt.max,
   });
 
-  
   const Users = new Map(UInt);
-  
-  const handlePmt = (netTok, nonNetTok) => [netTok, [nonNetTok, packTok]];
-  
+
+  const handlePmt = (netTok, nonNetTok) => [
+    netTok,
+    [0, nft],
+    [nonNetTok, packTok],
+  ];
+
   view.packTok.set(packTok);
+  view.NFT.set(nft);
   view.getUser.set(u => fromSome(Users[u], 0));
 
   Deployer.interact.ready();
@@ -44,7 +57,7 @@ export const vendingMachine = Reach.App(() => {
   const [R, costOfPack, tokSupply, howMuchPaid] = parallelReduce([
     digest(0),
     STARTING_PACK_COST,
-    0,
+    1,
     0,
   ])
     .define(() => {
@@ -56,7 +69,21 @@ export const vendingMachine = Reach.App(() => {
     })
     .invariant(balance() === howMuchPaid)
     .while(true)
-    .paySpec([packTok])
+    .paySpec([nft, packTok])
+    .define(() => {
+      const handleLoad = amt => [0, [amt, nft], [0, packTok]];
+    })
+    .api_(api.load, (rNum, amt) => {
+      check(this === Deployer, 'is loader deployer');
+      return [
+        handleLoad(amt),
+        notify => {
+          const rN = getRNum(rNum);
+          notify(null);
+          return [rN, costOfPack, tokSupply, howMuchPaid];
+        },
+      ];
+    })
     .define(() => {
       const getNewPackCost = () => {
         const newSupply = tokSupply + 1;
@@ -76,6 +103,7 @@ export const vendingMachine = Reach.App(() => {
     })
     .api_(api.buyPack, rNum => {
       check(balance(packTok) > 0, 'pack token available');
+      check(balance(nft) > 0, 'NFT is available');
       return [
         handlePmt(costOfPack, 0),
         notify => {
@@ -93,7 +121,12 @@ export const vendingMachine = Reach.App(() => {
       const assignPackPoints = (rNum, user) => {
         const foundUser = Users[user];
         const r = getRNum(rNum);
-        const pointsFrmPack = r % MAX_POINTS_IN_PACK + 1;
+        const pointsFrmPack =
+          (r %
+            (balance(nft) > MAX_POINTS_IN_PACK
+              ? MAX_POINTS_IN_PACK
+              : balance(nft))) +
+          1;
         Users[user] = fromSome(foundUser, 0) + pointsFrmPack;
         return [r, pointsFrmPack];
       };
@@ -104,6 +137,25 @@ export const vendingMachine = Reach.App(() => {
         notify => {
           const [r, pointsFromPack] = assignPackPoints(rNum, this);
           notify(pointsFromPack);
+          return [r, costOfPack, tokSupply, howMuchPaid];
+        },
+      ];
+    })
+    .define(() => {
+      const exchangePoints = user => {
+        const currentPoints = fromSome(Users[user], 0);
+        Users[user] = currentPoints - 1;
+      };
+    })
+    .api_(api.crank, rNum => {
+      check(isSome(Users[this]), 'user exists');
+      check(fromSome(Users[this], 0) > 0, 'user has points');
+      return [
+        handlePmt(0, 0),
+        notify => {
+          const r = getRNum(rNum);
+          exchangePoints(this);
+          notify(nft);
           return [r, costOfPack, tokSupply, howMuchPaid];
         },
       ];
