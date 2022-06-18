@@ -1,7 +1,7 @@
 import { loadStdlib } from '@reach-sh/stdlib';
 import * as vendingMachineBackend from './build/index.vendingMachine.mjs';
 
-const AMT_TO_BUY = 1;
+const AMT_TO_BUY = 50;
 
 const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
