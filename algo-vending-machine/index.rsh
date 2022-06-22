@@ -35,9 +35,10 @@ export const vendingMachine = Reach.App(() => {
   Deployer.publish(nft);
 
   const packTok = new Token({
-    name: 'Pack Token1111111111111111111111',
-    symbol: 'PACK1111',
+    name: Bytes(32).pad('Pack Token'),
+    symbol: Bytes(8).pad('PACK'),
     supply: UInt.max,
+    decimals: 0,
   });
 
   const Users = new Map(UInt);
@@ -113,7 +114,7 @@ export const vendingMachine = Reach.App(() => {
           sendPackTok(this);
           const updatedPaidAmt = howMuchPaid + costOfPack;
           const [newSupply, updatedPackCost] = getNewPackCost();
-          notify(tokSupply);
+          notify(updatedPackCost);
           return [rN, updatedPackCost, newSupply, updatedPaidAmt];
         },
       ];
@@ -146,7 +147,7 @@ export const vendingMachine = Reach.App(() => {
       const exchangePoints = user => {
         const currentPoints = fromSome(Users[user], 0);
         Users[user] = currentPoints - 1;
-        transfer(1, nft).to(user)
+        transfer(1, nft).to(user);
       };
     })
     .api_(api.crank, rNum => {
