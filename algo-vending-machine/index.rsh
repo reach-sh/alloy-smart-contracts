@@ -19,6 +19,7 @@ export const vendingMachine = Reach.App(() => {
     openPack: Fun([R_NUM], UInt),
     crank: Fun([R_NUM], Token),
   });
+  // views are things you want the frontend to know
   const view = View({
     packTok: Token,
     costOfPack: UInt,
@@ -48,7 +49,6 @@ export const vendingMachine = Reach.App(() => {
     [0, nft],
     [nonNetTok, packTok],
   ];
-
   view.packTok.set(packTok);
   view.NFT.set(nft);
   view.getUser.set(u => fromSome(Users[u], 0));

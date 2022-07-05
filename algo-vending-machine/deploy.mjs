@@ -2,13 +2,13 @@ import { loadStdlib, ask } from '@reach-sh/stdlib';
 import * as vendingMachineBackend from './build/index.vendingMachine.mjs';
 
 const NETWORK = 'ALGO';
-const PROVIDER = 'TestNet';
+const PROVIDER = 'MainNet';
 
 const getRandomNum = (max = 100) => Math.floor(Math.random() * max);
 const getRandomBigInt = () => stdlib.bigNumberify(getRandomNum());
 
 const getAccFromMnemonic = async (
-  message = 'Please paste the mnemonic of the deployer:'
+  message = 'Please paste the secret of the deployer:'
 ) => {
   const mnemonic = await ask.ask(message);
   const fmtMnemonic = mnemonic.replace(/,/g, '');
@@ -45,7 +45,7 @@ console.log('Please Wait...');
 await stdlib.withDisconnect(() =>
   ctcMachine.p.Deployer({
     ready: stdlib.disconnect,
-    NFT: nftId,
+    NFT: 790565842,
   })
 );
 // set global views for all functions to use
