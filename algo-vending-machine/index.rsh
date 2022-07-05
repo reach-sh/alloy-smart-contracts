@@ -19,7 +19,6 @@ export const vendingMachine = Reach.App(() => {
     openPack: Fun([R_NUM], UInt),
     crank: Fun([R_NUM], Token),
   });
-  // views are things you want the frontend to know
   const view = View({
     packTok: Token,
     costOfPack: UInt,

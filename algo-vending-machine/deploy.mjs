@@ -45,7 +45,7 @@ console.log('Please Wait...');
 await stdlib.withDisconnect(() =>
   ctcMachine.p.Deployer({
     ready: stdlib.disconnect,
-    NFT: 790565842,
+    NFT: nftId,
   })
 );
 // set global views for all functions to use
