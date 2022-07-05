@@ -48,7 +48,6 @@ export const vendingMachine = Reach.App(() => {
     [0, nft],
     [nonNetTok, packTok],
   ];
-
   view.packTok.set(packTok);
   view.NFT.set(nft);
   view.getUser.set(u => fromSome(Users[u], 0));
