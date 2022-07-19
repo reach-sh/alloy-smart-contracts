@@ -1,2 +1,1 @@
-# gashapon-core
-Smart contracts for Gashapon
+# Smart contracts written by Alloy team
