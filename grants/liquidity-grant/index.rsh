@@ -1,7 +1,10 @@
 'reach 0.1';
 'use strict';
 
-const STARTING_RENT_PRICE = 100;
+const STARTING_RENT_PRICE = 1_000_000;
+const SECONDS_PER_BLOCK = 9 / 2; // 4.5 seconds per block on Algorand
+const ONE_MINUTE = 60 / SECONDS_PER_BLOCK;
+const ONE_HOUR = ONE_MINUTE * 60;
 
 export const owner = Reach.App(() => {
   const Creator = Participant('Creator', {
@@ -20,6 +23,7 @@ export const owner = Reach.App(() => {
     rentPrice: UInt,
     numOfRenters: UInt,
     isAvailable: Bool,
+    creator: Address
   });
 
   init();
@@ -27,59 +31,76 @@ export const owner = Reach.App(() => {
   Creator.publish();
   Creator.interact.ready();
 
-  const [isAvailable, renter, rentEndTime, rentPrice, numOfRenters] =
-    parallelReduce([false, Creator, 0, STARTING_RENT_PRICE, 0])
-      .define(() => {
-        V.owner.set(rentEndTime > 0 ? renter : Creator);
-        V.endRentTime.set(rentEndTime);
-        V.rentPrice.set(rentPrice);
-        V.numOfRenters.set(numOfRenters);
-        V.isAvailable.set(isAvailable);
-      })
-      .invariant(balance() === 0)
-      .while(true)
-      .api_(api.makeAvailable, () => {
-        check(this === Creator, 'is owner');
-        check(!isAvailable, 'is available to rent');
-        return [
-          0,
-          notify => {
-            notify(null);
-            return [true, renter, rentEndTime, rentPrice, numOfRenters];
-          },
-        ];
-      })
-      .api_(api.rent, () => {
-        check(isAvailable, 'is available to rent');
-        check(renter !== this, 'is renter');
-        return [
-          rentPrice,
-          notify => {
-            const endRentTime = lastConsensusTime() + 10;
-            transfer(rentPrice).to(Creator);
-            notify(null);
-            return [isAvailable, this, endRentTime, rentPrice, numOfRenters];
-          },
-        ];
-      })
-      .define(() => {
-        const checkCanEndRent = () => {
-          check(rentEndTime > 0, 'is being rented');
-          check(lastConsensusTime() >= rentEndTime, 'is rent period up');
-        };
-      })
-      .api_(api.endRent, () => {
-        check(this === Creator, 'is creator');
-        check(renter !== this, 'is renter');
-        checkCanEndRent();
-        return [
-          0,
-          notify => {
-            notify(null);
-            return [isAvailable, Creator, 0, rentPrice, numOfRenters];
-          },
-        ];
-      });
+  V.creator.set(Creator)
+
+  const [
+    isAvailable,
+    renter,
+    startRentTime,
+    rentEndTime,
+    rentPrice,
+    numOfRenters,
+  ] = parallelReduce([false, Creator, 0, 0, STARTING_RENT_PRICE, 0])
+    .define(() => {
+      V.owner.set(rentEndTime > 0 ? renter : Creator);
+      V.endRentTime.set(rentEndTime);
+      V.rentPrice.set(rentPrice);
+      V.numOfRenters.set(numOfRenters);
+      V.isAvailable.set(isAvailable);
+    })
+    .invariant(balance() === 0)
+    .while(true)
+    .api_(api.makeAvailable, () => {
+      check(this === Creator, 'is owner');
+      check(!isAvailable, 'is available to rent');
+      return [
+        0,
+        notify => {
+          notify(null);
+          return [
+            true,
+            renter,
+            startRentTime,
+            rentEndTime,
+            rentPrice,
+            numOfRenters,
+          ];
+        },
+      ];
+    })
+    .api_(api.rent, () => {
+      const now = thisConsensusTime()
+      check(isAvailable, 'is available to rent');
+      check(renter !== this, 'is renter');
+      check(now >= rentEndTime, 'rent time is up')
+      return [
+        rentPrice,
+        notify => {
+          const endRentTime = now + ONE_HOUR;
+          transfer(rentPrice).to(Creator);
+          notify(null);
+          return [isAvailable, this, now, endRentTime, rentPrice, numOfRenters + 1];
+        },
+      ];
+    })
+    .define(() => {
+      const checkCanEndRent = () => {
+        check(rentEndTime > 0, 'is being rented');
+        check(lastConsensusTime() >= rentEndTime, 'is rent period up');
+      };
+    })
+    .api_(api.endRent, () => {
+      check(this === Creator, 'is creator');
+      check(renter !== this, 'is renter');
+      checkCanEndRent();
+      return [
+        0,
+        notify => {
+          notify(null);
+          return [isAvailable, Creator, 0, 0, rentPrice, numOfRenters];
+        },
+      ];
+    });
 
   commit();
   exit();
