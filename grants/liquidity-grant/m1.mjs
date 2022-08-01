@@ -29,22 +29,8 @@ const ctcAnnouncer = acc3.contract(
   stdlib.bigNumberToNumber(annCTCInfo)
 );
 const {
-  e: { Announce },
   a: annApi,
 } = ctcAnnouncer;
-
-const startAnnouncer = async () => {
-  console.log('announcer started...');
-  const accObs = await r.createAccount();
-  const ctcAnnObs = accObs.contract(announcerBin, ctcInfoAnn);
-  const check = ({ what }) => {
-    const ctcInfo = what[0];
-    const fmtCtc = stdlib.bigNumberToNumber(ctcInfo);
-    console.log('announced:', fmtCtc);
-  };
-  await Announce.monitor(check);
-};
-startAnnouncer();
 
 // deploy contract
 await stdlib.withDisconnect(() =>
@@ -75,12 +61,12 @@ await a1.makeAvailable();
 const ctcRenter = accRenter.contract(backend, ctcInfo);
 const { a: a2, v } = ctcRenter;
 const [_a, o] = await v.owner();
-console.log('o', fmtAddr(o));
-const rentCtc = await a2.rent();
+console.log('owner', fmtAddr(o));
+await a2.rent();
 const [_b, o1] = await v.owner();
 const [_c, rt] = await v.endRentTime();
 const fmtEndBlock = stdlib.bigNumberToNumber(rt);
 const time = await stdlib.getNetworkTime();
 console.log('time', fmtNum(time));
 console.log('fmtEndBlock', fmtEndBlock);
-console.log('o', fmtAddr(o1));
+console.log('owner', fmtAddr(o1));

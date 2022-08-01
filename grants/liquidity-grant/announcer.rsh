@@ -1,13 +1,15 @@
 'reach 0.1';
 'use strict';
 
+const Renter = Address
+
 export const main = Reach.App(() => {
   const Deployer = Participant('Deployer', { ready: Fun([], Null) });
   const A = API({
-    announce: Fun([Contract], Null),
+    announce: Fun([Renter], Null),
   });
   const N = Events({
-    Announce: [Contract],
+    Announce: [Renter],
   });
   init();
   Deployer.publish();
@@ -15,12 +17,12 @@ export const main = Reach.App(() => {
   const [] = parallelReduce([])
     .while(true)
     .invariant(balance() == 0, 'zero balance')
-    .api_(A.announce, ctc => {
+    .api_(A.announce, r => {
       return [
         0,
         k => {
           k(null);
-          N.Announce(ctc);
+          N.Announce(r);
           return [];
         },
       ];

@@ -23,7 +23,7 @@ export const owner = Reach.App(() => {
     rentPrice: UInt,
     numOfRenters: UInt,
     isAvailable: Bool,
-    creator: Address
+    creator: Address,
   });
 
   init();
@@ -31,7 +31,7 @@ export const owner = Reach.App(() => {
   Creator.publish();
   Creator.interact.ready();
 
-  V.creator.set(Creator)
+  V.creator.set(Creator);
 
   const [
     isAvailable,
@@ -68,30 +68,38 @@ export const owner = Reach.App(() => {
         },
       ];
     })
+    .define(() => {
+      const now = thisConsensusTime();
+    })
     .api_(api.rent, () => {
-      const now = thisConsensusTime()
       check(isAvailable, 'is available to rent');
       check(renter !== this, 'is renter');
-      check(now >= rentEndTime, 'rent time is up')
+      check(now >= rentEndTime, 'rent time is up');
       return [
         rentPrice,
         notify => {
           const endRentTime = now + ONE_HOUR;
           transfer(rentPrice).to(Creator);
           notify(null);
-          return [isAvailable, this, now, endRentTime, rentPrice, numOfRenters + 1];
+          return [
+            isAvailable,
+            this,
+            now,
+            endRentTime,
+            rentPrice,
+            numOfRenters + 1,
+          ];
         },
       ];
     })
     .define(() => {
       const checkCanEndRent = () => {
         check(rentEndTime > 0, 'is being rented');
-        check(lastConsensusTime() >= rentEndTime, 'is rent period up');
+        check(now >= rentEndTime, 'is rent period up');
       };
     })
     .api_(api.endRent, () => {
       check(this === Creator, 'is creator');
-      check(renter !== this, 'is renter');
       checkCanEndRent();
       return [
         0,
