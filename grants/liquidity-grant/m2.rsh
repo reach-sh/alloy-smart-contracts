@@ -3,9 +3,7 @@
 
 const STARTING_RENT_PRICE = 1_000_000;
 
-const ONE_MINUTE = 60; // 60 seconds in a minute
-const ONE_HOUR = ONE_MINUTE * 60;
-const ONE_DAY = ONE_HOUR * 24
+const RENT_BLOCKS = 50;
 
 const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
@@ -62,6 +60,7 @@ export const pool = Reach.App(() => {
       .define(() => {
         const totalNFTs = availableNFTs + rentedNFTs;
 
+        const getTime = addTime => lastConsensusTime() + addTime;
         const handlePmt = (netAmt, NftAmt) => [netAmt, [NftAmt, nft]];
         const mkNullEndArr = i => {
           check(i <= MAX_POOL_INDEX);
@@ -143,17 +142,14 @@ export const pool = Reach.App(() => {
           },
         ];
       })
-      .define(() => {
-        const getEndRentTime = () => lastConsensusSecs() + ONE_MINUTE;
-      })
       .api_(api.rent, () => {
         check(availableNFTs > 0, 'is available');
         check(isNone(Renters[this]), 'is renter');
         const x = availableNFTs - 1;
         const newRentPrice = totalNFTs + x;
         check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
-        check(pool[renterSlot].isOpen, 'is taken')
-        const endRentTime = getEndRentTime();
+        check(pool[renterSlot].isOpen, 'is taken');
+        const endRentTime = getTime(RENT_BLOCKS);
         return [
           handlePmt(rentPrice, 0),
           notify => {
@@ -177,9 +173,10 @@ export const pool = Reach.App(() => {
             ];
           },
         ];
-      }).define(() => {
+      })
+      .define(() => {
         const chkCanReclaim = slotInfo => {
-          const now = lastConsensusSecs();
+          const now = getTime(0);
           check(slotInfo.renter !== thisAddress, 'has renter');
           check(!slotInfo.isOpen, 'not open');
           check(slotInfo.endRentTime > 0, 'valid rent time');

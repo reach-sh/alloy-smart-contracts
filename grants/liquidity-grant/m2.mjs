@@ -97,8 +97,12 @@ for (const a of renterAccounts) {
 
 console.log('waiting...')
 const slotInfo = await getSlotInfo(lenderAccounts[0]);
-await stdlib.waitUntilSecs(slotInfo.endRentTime); // wait until rent period ends
+await stdlib.waitUntilTime(stdlib.bigNumberify(slotInfo.endRentTime + 1)); // wait until rent period ends
 const ctcl1 = lenderAccounts[0].contract(backend, ctcInfo);
-const currTime = await stdlib.getNetworkSecs()
+const currTime = await stdlib.getNetworkTime()
+console.log({
+  currTime: fmtNum(currTime),
+  rentEnd: slotInfo.endRentTime,
+});
 console.log('can reclaim:', currTime >= slotInfo.endRentTime);
 await ctcl1.a.reclaim()
