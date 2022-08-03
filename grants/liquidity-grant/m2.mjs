@@ -5,8 +5,8 @@ const stdlib = loadStdlib('ALGO');
 
 const bal = stdlib.parseCurrency(1000);
 const accDeployer = await stdlib.newTestAccount(bal);
-const lenderAccounts = await stdlib.newTestAccounts(10, bal);
-const renterAccounts = await stdlib.newTestAccounts(10, bal);
+const lenderAccounts = await stdlib.newTestAccounts(20, bal);
+const renterAccounts = await stdlib.newTestAccounts(19, bal);
 
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
@@ -24,7 +24,7 @@ const nft = await stdlib.launchToken(
 const ctcMachine = accDeployer.contract(backend);
 await stdlib.withDisconnect(() =>
   ctcMachine.p.Creator({
-    nft: nft.id,
+    tok: nft.id,
     ready: stdlib.disconnect,
   })
 );
@@ -55,14 +55,11 @@ const getSlotInfo = async (a, lender) => {
 const logViews = async (a, lender) => {
   const acc = await stdlib.newTestAccount(bal);
   const { v } = acc.contract(backend, ctcInfo);
-  const [_a, rAvailable] = await v.available();
-  const [_b, rRentPrice] = await v.rentPrice();
-  const [_c, rTotal] = await v.total();
-  const [_d, rRented] = await v.rented();
-  const fmtAvailable = fmtNum(rAvailable);
-  const fmtPrice = fmtNum(rRentPrice);
-  const fmtTotal = fmtNum(rTotal);
-  const fmtRented = fmtNum(rRented);
+  const [_a, stats] = await v.stats();
+  const fmtAvailable = fmtNum(stats.available);
+  const fmtPrice = fmtNum(stats.rentPrice);
+  const fmtTotal = fmtNum(stats.total);
+  const fmtRented = fmtNum(stats.rented);
   let info;
   if (a) {
     info = await getSlotInfo(a, lender);
@@ -88,6 +85,10 @@ for (const a of lenderAccounts) {
   await logViews(a, true);
 }
 
+// delist NFT
+const ctcL1 = lenderAccounts[0].contract(backend, ctcInfo);
+await ctcL1.a.delist();
+
 // rent NFT's
 for (const a of renterAccounts) {
   const ctc = a.contract(backend, ctcInfo);
@@ -95,14 +96,16 @@ for (const a of renterAccounts) {
   await logViews(a);
 }
 
-console.log('waiting...')
-const slotInfo = await getSlotInfo(lenderAccounts[0]);
-await stdlib.waitUntilTime(stdlib.bigNumberify(slotInfo.endRentTime + 1)); // wait until rent period ends
-const ctcl1 = lenderAccounts[0].contract(backend, ctcInfo);
-const currTime = await stdlib.getNetworkTime()
+// reclaim rented NFT
+console.log('waiting...');
+const slotInfo = await getSlotInfo(lenderAccounts[1], true);
+// wait until rent period ends
+await stdlib.waitUntilTime(stdlib.bigNumberify(slotInfo.endRentTime));
+const ctcl2 = lenderAccounts[1].contract(backend, ctcInfo);
+const currTime = await stdlib.getNetworkTime();
 console.log({
   currTime: fmtNum(currTime),
   rentEnd: slotInfo.endRentTime,
 });
 console.log('can reclaim:', currTime >= slotInfo.endRentTime);
-await ctcl1.a.reclaim()
+await ctcl2.a.reclaim();

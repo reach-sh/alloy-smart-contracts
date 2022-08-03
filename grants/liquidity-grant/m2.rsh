@@ -14,9 +14,16 @@ const PoolSlot = Struct([
   ['isOpen', Bool],
 ]);
 
+const Stats = Struct([
+  ['rentPrice', UInt],
+  ['available', UInt],
+  ['total', UInt],
+  ['rented', UInt],
+]);
+
 export const pool = Reach.App(() => {
   const Creator = Participant('Creator', {
-    nft: Token,
+    tok: Token,
     ready: Fun([], Null),
   });
   const api = API({
@@ -26,10 +33,7 @@ export const pool = Reach.App(() => {
     reclaim: Fun([], Null),
   });
   const V = View({
-    rentPrice: UInt,
-    available: UInt,
-    total: UInt,
-    rented: UInt,
+    stats: Stats,
     getLender: Fun([Address], PoolSlot),
     getRenter: Fun([Address], PoolSlot),
   });
@@ -37,9 +41,9 @@ export const pool = Reach.App(() => {
   init();
 
   Creator.only(() => {
-    const nft = declassify(interact.nft);
+    const tok = declassify(interact.tok);
   });
-  Creator.publish(nft);
+  Creator.publish(tok);
 
   Creator.interact.ready();
 
@@ -51,84 +55,98 @@ export const pool = Reach.App(() => {
     isOpen: true,
   });
 
-  const Lenders = new Map(UInt);
-  const Renters = new Map(UInt);
+  const Lenders = new Map(Maybe(UInt));
+  const Renters = new Map(Maybe(UInt));
   const Pool = Array.replicate(POOL_SIZE, defPoolSlot);
 
-  const [rentedNFTs, availableNFTs, totPaid, pool] = parallelReduce([
+  const [rentedToks, availableToks, totPaid, pool] = parallelReduce([
     0,
     0,
     0,
     Pool,
   ])
     .define(() => {
-      const totalNFTs = availableNFTs + rentedNFTs;
+      // the next available indexes for the pool array are the current respective values
+      // i.e. there are 0 available tokens, I list a token,
+      // I get assigned index/slot 0 and the availableToks value increments by one
+      const nextAvailIndex = availableToks;
+      const nextRentIndex = rentedToks;
+      const totalToks = availableToks + rentedToks;
       const rentPrice =
-        rentedNFTs === 0
+        rentedToks === 0
           ? STARTING_RENT_PRICE
-          : rentedNFTs * STARTING_RENT_PRICE;
+          : rentedToks * STARTING_RENT_PRICE;
 
       const getTime = addTime => lastConsensusTime() + addTime;
-      const handlePmt = (netAmt, NftAmt) => [netAmt, [NftAmt, nft]];
+      const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
       const mkNullEndArr = i => {
-        check(i <= MAX_POOL_INDEX);
-        check(availableNFTs <= MAX_POOL_INDEX);
-        const k = availableNFTs == 0 ? 0 : availableNFTs - 1;
-        check(k <= MAX_POOL_INDEX);
-        const ip = i % availableNFTs;
-        check(ip <= MAX_POOL_INDEX);
+        assert(i <= MAX_POOL_INDEX);
+        const k = availableToks == 0 ? 0 : availableToks - 1;
+        assert(k <= MAX_POOL_INDEX);
+        const ip = i % availableToks;
+        assert(ip <= MAX_POOL_INDEX);
         const newArr = Array.set(pool, ip, pool[k]);
         const nullEndArr = Array.set(newArr, k, defPoolSlot);
         return nullEndArr;
       };
-
-      V.total.set(totalNFTs);
-      V.available.set(availableNFTs);
-      V.rentPrice.set(rentPrice);
-      V.rented.set(rentedNFTs);
+      const getSlot = (addy, renter) => {
+        const M = renter ? Renters : Lenders;
+        if (isNone(M[addy])) {
+          return [Maybe(UInt).None(), defPoolSlot];
+        } else {
+          const slot = fromSome(M[addy], Maybe(UInt).None());
+          const slotIndex = fromSome(slot, 0);
+          check(slotIndex <= MAX_POOL_INDEX, 'array bounds check');
+          const slotInfo = pool[slotIndex];
+          return [Maybe(UInt).Some(slotIndex), slotInfo];
+        }
+      };
+      V.stats.set(
+        Stats.fromObject({
+          rentPrice,
+          available: availableToks,
+          total: totalToks,
+          rented: rentedToks,
+        })
+      );
       V.getLender.set(addy => {
-        const slot = fromSome(Lenders[addy], 0);
-        check(slot <= MAX_POOL_INDEX);
-        const slotInfo = pool[slot];
+        const [_, slotInfo] = getSlot(addy, false);
         return slotInfo;
       });
       V.getRenter.set(addy => {
-        const slot = fromSome(Renters[addy], 0);
-        check(slot <= MAX_POOL_INDEX);
-        const slotInfo = pool[slot];
+        const [_, slotInfo] = getSlot(addy, true);
         return slotInfo;
       });
     })
-    .invariant(balance(nft) === totalNFTs && balance() === totPaid)
+    .invariant(balance(tok) === totalToks)
+    .invariant(balance() === totPaid)
+    .invariant(availableToks <= POOL_SIZE)
     .while(true)
     .define(() => {
-      const lenderSlot = availableNFTs;
-      const chkCanList = () => {
-        check(lenderSlot <= MAX_POOL_INDEX, 'array bounds check');
-        check(isNone(Lenders[this]), 'is lender');
-        check(lenderSlot + 1 <= MAX_POOL_INDEX, 'lenders are full');
+      const chkCanList = who => {
+        check(isNone(Lenders[who]), 'is lender');
+        check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
       };
     })
     .api_(api.list, () => {
-      chkCanList();
+      chkCanList(this);
       return [
         handlePmt(0, 1),
         notify => {
-          Lenders[this] = lenderSlot;
+          Lenders[this] = Maybe(UInt).Some(nextAvailIndex);
           notify(null);
-          return [rentedNFTs, availableNFTs + 1, totPaid, pool];
+          return [rentedToks, availableToks + 1, totPaid, pool];
         },
       ];
     })
     .define(() => {
       const chkCanDelist = who => {
-        const x = Lenders[who];
-        const lenderSlotToremove = fromSome(x, 0);
-        check(lenderSlotToremove > 0, 'is lender');
-        const indexToremove = lenderSlotToremove - 1;
+        const [slot, _] = getSlot(who, false);
+        check(isSome(slot));
+        const indexToremove = fromSome(slot, 0);
         check(indexToremove <= MAX_POOL_INDEX);
-        check(balance(nft) > 0);
-        check(availableNFTs > 0);
+        check(balance(tok) > 0);
+        check(availableToks > 0);
         return indexToremove;
       };
     })
@@ -140,39 +158,38 @@ export const pool = Reach.App(() => {
           const updatedPool = mkNullEndArr(indexToremove);
           delete Lenders[this];
           notify(null);
-          transfer(1, nft).to(this);
-          return [rentedNFTs, availableNFTs - 1, totPaid, updatedPool];
+          transfer(1, tok).to(this);
+          return [rentedToks, availableToks - 1, totPaid, updatedPool];
         },
       ];
     })
     .define(() => {
-      const renterSlot = rentedNFTs;
-      const chkCanRent = () => {
-        check(availableNFTs > 0, 'is available');
-        check(isNone(Renters[this]), 'is renter');
-        check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
-        check(pool[renterSlot].isOpen, 'is taken');
+      const chkCanRent = who => {
+        check(availableToks > 0, 'is available');
+        check(isNone(Renters[who]), 'is renter');
+        check(rentedToks <= MAX_POOL_INDEX, 'array bounds check')
+        check(pool[rentedToks].isOpen, 'is taken');
       };
     })
     .api_(api.rent, () => {
-      chkCanRent();
+      chkCanRent(this);
       const endRentTime = getTime(RENT_BLOCKS);
       return [
         handlePmt(rentPrice, 0),
         notify => {
           const updatedPool = pool.set(
-            renterSlot,
+            nextRentIndex,
             PoolSlot.fromObject({
               isOpen: false,
               renter: this,
               endRentTime,
             })
           );
-          Renters[this] = renterSlot;
+          Renters[this] = Maybe(UInt).Some(nextRentIndex);
           notify(endRentTime);
           return [
-            rentedNFTs + 1,
-            availableNFTs - 1,
+            rentedToks + 1,
+            availableToks - 1,
             totPaid + rentPrice,
             updatedPool,
           ];
@@ -182,15 +199,15 @@ export const pool = Reach.App(() => {
     .define(() => {
       const chkCanReclaim = who => {
         const now = getTime(0);
-        check(isSome(Lenders[who]), 'is lender');
-        const slotToReclaim = fromSome(Lenders[this], 0);
-        check(slotToReclaim <= MAX_POOL_INDEX);
-        const slotInfo = pool[slotToReclaim];
+        const [slot, slotInfo] = getSlot(who, false);
+        check(isSome(slot));
+        const s = fromSome(slot, 0);
         check(slotInfo.renter !== thisAddress, 'has renter');
         check(!slotInfo.isOpen, 'not open');
         check(slotInfo.endRentTime > 0, 'valid rent time');
         check(now >= slotInfo.endRentTime, 'rent time passed');
-        return [slotInfo, slotToReclaim];
+        check(availableToks <= MAX_POOL_INDEX, 'slot available');
+        return [slotInfo, s];
       };
     })
     .api_(api.reclaim, () => {
@@ -201,7 +218,7 @@ export const pool = Reach.App(() => {
           const updatedPool = pool.set(slotToReclaim, defPoolSlot);
           delete Renters[slotInfo.renter];
           notify(null);
-          return [rentedNFTs - 1, availableNFTs + 1, totPaid, updatedPool];
+          return [rentedToks - 1, availableToks + 1, totPaid, updatedPool];
         },
       ];
     });
