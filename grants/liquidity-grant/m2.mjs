@@ -30,8 +30,29 @@ await stdlib.withDisconnect(() =>
 );
 const ctcInfo = await ctcMachine.getInfo();
 
-const logViews = async (address, lender) => {
-  let available, rentPrice, total, rented, renterInfo, lenderInfo;
+const getSlotInfo = async (a, lender) => {
+  const acc = await stdlib.newTestAccount(bal);
+  const { v } = acc.contract(backend, ctcInfo);
+  const addy = a.networkAccount.addr;
+  const fmtInfo = i => {
+    if (i)
+      return {
+        ...i,
+        renter: fmtAddr(i.renter),
+        endRentTime: fmtNum(i.endRentTime),
+      };
+    return null;
+  };
+  if (lender) {
+    const [_p, i] = await v.getLender(addy);
+    return fmtInfo(i);
+  } else {
+    const [_p, i] = await v.getRenter(addy);
+    return fmtInfo(i);
+  }
+};
+
+const logViews = async (a, lender) => {
   const acc = await stdlib.newTestAccount(bal);
   const { v } = acc.contract(backend, ctcInfo);
   const [_a, rAvailable] = await v.available();
@@ -42,46 +63,42 @@ const logViews = async (address, lender) => {
   const fmtPrice = fmtNum(rRentPrice);
   const fmtTotal = fmtNum(rTotal);
   const fmtRented = fmtNum(rRented);
-  if (address) {
-    if (lender) {
-      const [_p, i] = await v.getLender(address);
-      lenderInfo = i;
-    } else {
-      const [_p, i] = await v.getRenter(address);
-      renterInfo = i;
-    }
+  let info;
+  if (a) {
+    info = await getSlotInfo(a, lender);
   }
-  available = fmtAvailable;
-  rentPrice = fmtPrice;
-  total = fmtTotal;
-  rented = fmtRented;
-  console.log({
-    available,
-    rentPrice,
-    total,
-    rented,
-    renterInfo,
-    lenderInfo,
-  });
+  const result = {
+    available: fmtAvailable,
+    rentPrice: fmtPrice,
+    total: fmtTotal,
+    rented: fmtRented,
+    info,
+  };
+  console.log(result);
 };
 // initial views after deploy
 await logViews();
 
-// list nft's
+// list NFT's
 for (const a of lenderAccounts) {
   await a.tokenAccept(nft.id);
   await stdlib.transfer(accDeployer, a, 100, nft.id);
   const ctc = a.contract(backend, ctcInfo);
   await ctc.a.list();
-  await logViews(a.networkAccount.addr, true);
+  await logViews(a, true);
 }
 
-const c = await lenderAccounts[2].contract(backend, ctcInfo);
-await c.a.delist()
-await logViews();
-
+// rent NFT's
 for (const a of renterAccounts) {
   const ctc = a.contract(backend, ctcInfo);
   await ctc.a.rent();
-  await logViews(a.networkAccount.addr);
+  await logViews(a);
 }
+
+console.log('waiting...')
+const slotInfo = await getSlotInfo(lenderAccounts[0]);
+await stdlib.waitUntilSecs(slotInfo.endRentTime); // wait until rent period ends
+const ctcl1 = lenderAccounts[0].contract(backend, ctcInfo);
+const currTime = await stdlib.getNetworkSecs()
+console.log('can reclaim:', currTime >= slotInfo.endRentTime);
+await ctcl1.a.reclaim()

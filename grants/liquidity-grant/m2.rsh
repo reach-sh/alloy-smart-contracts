@@ -2,16 +2,21 @@
 'use strict';
 
 const STARTING_RENT_PRICE = 1_000_000;
-const POOL_SIZE = 95;
+
+const ONE_MINUTE = 60; // 60 seconds in a minute
+const ONE_HOUR = ONE_MINUTE * 60;
+const ONE_DAY = ONE_HOUR * 24
+
+const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
 
-export const pool = Reach.App(() => {
-  const PoolSlot = Object({
-    renter: Address,
-    endRentTime: UInt,
-    isOpen: Bool,
-  });
+const PoolSlot = Struct([
+  ['renter', Address],
+  ['endRentTime', UInt],
+  ['isOpen', Bool],
+]);
 
+export const pool = Reach.App(() => {
   const Creator = Participant('Creator', {
     nft: Token,
     ready: Fun([], Null),
@@ -42,20 +47,21 @@ export const pool = Reach.App(() => {
 
   const thisAddress = getAddress();
 
-  const defPoolSlot = {
+  const defPoolSlot = PoolSlot.fromObject({
     renter: thisAddress,
     endRentTime: 0,
     isOpen: true,
-  };
+  });
 
   const Lenders = new Map(UInt);
   const Renters = new Map(UInt);
   const Pool = Array.replicate(POOL_SIZE, defPoolSlot);
 
   const [rentedNFTs, availableNFTs, totPaid, rentPrice, pool, renterSlot] =
-    parallelReduce([0, 0, 0, STARTING_RENT_PRICE, Pool, 1])
+    parallelReduce([0, 0, 0, STARTING_RENT_PRICE, Pool, 0])
       .define(() => {
-        const getEndRentTime = () => thisConsensusTime() + 1;
+        const totalNFTs = availableNFTs + rentedNFTs;
+
         const handlePmt = (netAmt, NftAmt) => [netAmt, [NftAmt, nft]];
         const mkNullEndArr = i => {
           check(i <= MAX_POOL_INDEX);
@@ -69,8 +75,6 @@ export const pool = Reach.App(() => {
           return nullEndArr;
         };
 
-        const totalNFTs = availableNFTs + rentedNFTs;
-
         V.total.set(totalNFTs);
         V.available.set(availableNFTs);
         V.rentPrice.set(rentPrice);
@@ -78,13 +82,13 @@ export const pool = Reach.App(() => {
         V.getLender.set(addy => {
           const slot = fromSome(Lenders[addy], 0);
           check(slot <= MAX_POOL_INDEX);
-          const slotInfo = pool[slot - 1];
+          const slotInfo = pool[slot];
           return slotInfo;
         });
         V.getRenter.set(addy => {
           const slot = fromSome(Renters[addy], 0);
           check(slot <= MAX_POOL_INDEX);
-          const slotInfo = pool[slot - 1];
+          const slotInfo = pool[slot];
           return slotInfo;
         });
       })
@@ -92,20 +96,11 @@ export const pool = Reach.App(() => {
       .while(true)
       .define(() => {
         const lenderSlot = availableNFTs;
-        const getLenderSlotIndex = () => {
-          if (lenderSlot > 0) {
-            check(lenderSlot > 0, 'is valid lender slot');
-            return lenderSlot - 1;
-          } else {
-            return 0;
-          }
-        };
       })
       .api_(api.list, () => {
-        const lenderSlotIndex = getLenderSlotIndex();
-        check(lenderSlotIndex <= MAX_POOL_INDEX, 'array bounds check');
+        check(lenderSlot <= MAX_POOL_INDEX, 'array bounds check');
         check(isNone(Lenders[this]), 'is lender');
-        check(availableNFTs + 1 <= MAX_POOL_INDEX, 'lenders are full');
+        check(lenderSlot + 1 <= MAX_POOL_INDEX, 'lenders are full');
         return [
           handlePmt(0, 1),
           notify => {
@@ -148,23 +143,27 @@ export const pool = Reach.App(() => {
           },
         ];
       })
+      .define(() => {
+        const getEndRentTime = () => lastConsensusSecs() + ONE_MINUTE;
+      })
       .api_(api.rent, () => {
         check(availableNFTs > 0, 'is available');
         check(isNone(Renters[this]), 'is renter');
         const x = availableNFTs - 1;
         const newRentPrice = totalNFTs + x;
-        check(renterSlot > 0, 'is there open slot');
-        const renterSlotIndex = renterSlot - 1;
-        check(renterSlotIndex <= MAX_POOL_INDEX, 'is valid slot');
+        check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
         const endRentTime = getEndRentTime();
         return [
           handlePmt(rentPrice, 0),
           notify => {
-            const updatedPool = pool.set(renterSlotIndex, {
-              isOpen: false,
-              renter: this,
-              endRentTime,
-            });
+            const updatedPool = pool.set(
+              renterSlot,
+              PoolSlot.fromObject({
+                isOpen: false,
+                renter: this,
+                endRentTime,
+              })
+            );
             Renters[this] = renterSlot;
             notify(endRentTime);
             return [
@@ -177,27 +176,25 @@ export const pool = Reach.App(() => {
             ];
           },
         ];
-      })
-      .define(() => {
-        // const now = thisConsensusTime();
+      }).define(() => {
+        const chkCanReclaim = slotInfo => {
+          const now = lastConsensusSecs();
+          check(slotInfo.renter !== thisAddress, 'has renter');
+          check(!slotInfo.isOpen, 'not open');
+          check(slotInfo.endRentTime > 0, 'valid rent time');
+          check(now >= slotInfo.endRentTime, 'rent time passed');
+        };
       })
       .api_(api.reclaim, () => {
         check(isSome(Lenders[this]), 'is lender');
         const slotToReclaim = fromSome(Lenders[this], 0);
-        check(slotToReclaim < MAX_POOL_INDEX);
+        check(slotToReclaim <= MAX_POOL_INDEX);
         const slotInfo = pool[slotToReclaim];
-        check(slotInfo.renter !== thisAddress, 'has renter');
-        check(!slotInfo.isOpen, 'not open');
-        check(slotInfo.endRentTime > 0, 'valid rent time');
-        // check(now >= slotInfo.endRentTime, 'can reclaim');
+        chkCanReclaim(slotInfo);
         return [
           handlePmt(0, 0),
           notify => {
-            const updatedPool = pool.set(slotToReclaim, {
-              renter: thisAddress,
-              isOpen: true,
-              endRentTime: 0,
-            });
+            const updatedPool = pool.set(slotToReclaim, defPoolSlot);
             delete Renters[slotInfo.renter];
             notify(null);
             return [
