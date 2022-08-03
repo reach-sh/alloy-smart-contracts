@@ -152,6 +152,7 @@ export const pool = Reach.App(() => {
         const x = availableNFTs - 1;
         const newRentPrice = totalNFTs + x;
         check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
+        check(pool[renterSlot].isOpen, 'is taken')
         const endRentTime = getEndRentTime();
         return [
           handlePmt(rentPrice, 0),
