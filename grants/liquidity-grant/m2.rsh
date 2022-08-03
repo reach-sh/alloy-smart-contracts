@@ -103,11 +103,14 @@ export const pool = Reach.App(() => {
     .while(true)
     .define(() => {
       const lenderSlot = availableNFTs;
+      const chkCanList = () => {
+        check(lenderSlot <= MAX_POOL_INDEX, 'array bounds check');
+        check(isNone(Lenders[this]), 'is lender');
+        check(lenderSlot + 1 <= MAX_POOL_INDEX, 'lenders are full');
+      };
     })
     .api_(api.list, () => {
-      check(lenderSlot <= MAX_POOL_INDEX, 'array bounds check');
-      check(isNone(Lenders[this]), 'is lender');
-      check(lenderSlot + 1 <= MAX_POOL_INDEX, 'lenders are full');
+      chkCanList();
       return [
         handlePmt(0, 1),
         notify => {
@@ -117,14 +120,20 @@ export const pool = Reach.App(() => {
         },
       ];
     })
+    .define(() => {
+      const chkCanDelist = who => {
+        const x = Lenders[who];
+        const lenderSlotToremove = fromSome(x, 0);
+        check(lenderSlotToremove > 0, 'is lender');
+        const indexToremove = lenderSlotToremove - 1;
+        check(indexToremove <= MAX_POOL_INDEX);
+        check(balance(nft) > 0);
+        check(availableNFTs > 0);
+        return indexToremove;
+      };
+    })
     .api_(api.delist, () => {
-      const x = Lenders[this];
-      const lenderSlotToremove = fromSome(x, 0);
-      check(lenderSlotToremove > 0, 'is lender');
-      const indexToremove = lenderSlotToremove - 1;
-      check(indexToremove <= MAX_POOL_INDEX);
-      check(balance(nft) > 0);
-      check(availableNFTs > 0);
+      const indexToremove = chkCanDelist(this);
       return [
         handlePmt(0, 0),
         notify => {
@@ -138,12 +147,15 @@ export const pool = Reach.App(() => {
     })
     .define(() => {
       const renterSlot = rentedNFTs;
+      const chkCanRent = () => {
+        check(availableNFTs > 0, 'is available');
+        check(isNone(Renters[this]), 'is renter');
+        check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
+        check(pool[renterSlot].isOpen, 'is taken');
+      };
     })
     .api_(api.rent, () => {
-      check(availableNFTs > 0, 'is available');
-      check(isNone(Renters[this]), 'is renter');
-      check(renterSlot <= MAX_POOL_INDEX, 'is valid slot');
-      check(pool[renterSlot].isOpen, 'is taken');
+      chkCanRent();
       const endRentTime = getTime(RENT_BLOCKS);
       return [
         handlePmt(rentPrice, 0),
@@ -168,20 +180,21 @@ export const pool = Reach.App(() => {
       ];
     })
     .define(() => {
-      const chkCanReclaim = slotInfo => {
+      const chkCanReclaim = who => {
         const now = getTime(0);
+        check(isSome(Lenders[who]), 'is lender');
+        const slotToReclaim = fromSome(Lenders[this], 0);
+        check(slotToReclaim <= MAX_POOL_INDEX);
+        const slotInfo = pool[slotToReclaim];
         check(slotInfo.renter !== thisAddress, 'has renter');
         check(!slotInfo.isOpen, 'not open');
         check(slotInfo.endRentTime > 0, 'valid rent time');
         check(now >= slotInfo.endRentTime, 'rent time passed');
+        return [slotInfo, slotToReclaim];
       };
     })
     .api_(api.reclaim, () => {
-      check(isSome(Lenders[this]), 'is lender');
-      const slotToReclaim = fromSome(Lenders[this], 0);
-      check(slotToReclaim <= MAX_POOL_INDEX);
-      const slotInfo = pool[slotToReclaim];
-      chkCanReclaim(slotInfo);
+      const [slotInfo, slotToReclaim] = chkCanReclaim(this);
       return [
         handlePmt(0, 0),
         notify => {
