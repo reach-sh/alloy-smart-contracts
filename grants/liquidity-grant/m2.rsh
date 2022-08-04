@@ -3,7 +3,7 @@
 
 const STARTING_RENT_PRICE = 1_000_000;
 
-const RENT_BLOCKS = 50;
+const RENT_BLOCKS = 100;
 
 const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
@@ -72,12 +72,13 @@ export const pool = Reach.App(() => {
       const nextAvailIndex = availableToks;
       const nextRentIndex = rentedToks;
       const totalToks = availableToks + rentedToks;
+      // rent price is affected based on how many tokens are being rented at a given time
       const rentPrice =
         rentedToks === 0
           ? STARTING_RENT_PRICE
           : rentedToks * STARTING_RENT_PRICE;
 
-      const getTime = addTime => lastConsensusTime() + addTime;
+      const getTime = addTime => thisConsensusTime() + addTime;
       const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
       const mkNullEndArr = i => {
         assert(i <= MAX_POOL_INDEX);
@@ -122,14 +123,9 @@ export const pool = Reach.App(() => {
     .invariant(balance() === totPaid)
     .invariant(availableToks <= POOL_SIZE)
     .while(true)
-    .define(() => {
-      const chkCanList = who => {
-        check(isNone(Lenders[who]), 'is lender');
-        check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
-      };
-    })
     .api_(api.list, () => {
-      chkCanList(this);
+      check(isNone(Lenders[this]), 'is lender');
+      check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
       return [
         handlePmt(0, 1),
         notify => {
@@ -139,19 +135,13 @@ export const pool = Reach.App(() => {
         },
       ];
     })
-    .define(() => {
-      const chkCanDelist = who => {
-        check(isSome(Lenders[who]), 'is lender');
-        const [slot, _] = getSlot(who, false);
-        check(isSome(slot), 'is valid slot');
-        const indexToremove = fromSome(slot, 0);
-        check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
-        check(availableToks > 0);
-        return indexToremove;
-      };
-    })
     .api_(api.delist, () => {
-      const indexToremove = chkCanDelist(this);
+      check(availableToks > 0, 'has token to reclaim');
+      check(isSome(Lenders[this]), 'is lender');
+      const [slot, _] = getSlot(this, false);
+      check(isSome(slot), 'is valid slot');
+      const indexToremove = fromSome(slot, 0);
+      check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
       return [
         handlePmt(0, 0),
         notify => {
@@ -163,16 +153,11 @@ export const pool = Reach.App(() => {
         },
       ];
     })
-    .define(() => {
-      const chkCanRent = who => {
-        check(availableToks > 0, 'is available');
-        check(isNone(Renters[who]), 'is renter');
-        check(rentedToks <= MAX_POOL_INDEX, 'array bounds check');
-        check(pool[rentedToks].isOpen, 'is taken');
-      };
-    })
     .api_(api.rent, () => {
-      chkCanRent(this);
+      check(availableToks > 0, 'is available');
+      check(isNone(Renters[this]), 'is renter');
+      check(rentedToks <= MAX_POOL_INDEX, 'array bounds check');
+      check(pool[rentedToks].isOpen, 'is slot available');
       const endRentTime = getTime(RENT_BLOCKS);
       return [
         handlePmt(rentPrice, 0),
@@ -196,26 +181,20 @@ export const pool = Reach.App(() => {
         },
       ];
     })
-    .define(() => {
-      const chkCanReclaim = who => {
-        const now = getTime(0);
-        const [slot, slotInfo] = getSlot(who, false);
-        check(isSome(slot), 'is valid slot');
-        const s = fromSome(slot, 0);
-        check(slotInfo.renter !== thisAddress, 'has renter');
-        check(!slotInfo.isOpen, 'not open');
-        check(slotInfo.endRentTime > 0, 'valid rent time');
-        check(now >= slotInfo.endRentTime, 'rent time passed');
-        check(availableToks <= MAX_POOL_INDEX, 'slot available');
-        return [slotInfo, s];
-      };
-    })
     .api_(api.reclaim, () => {
-      const [slotInfo, slotToReclaim] = chkCanReclaim(this);
+      const now = getTime(0);
+      const [slot, slotInfo] = getSlot(this, false);
+      check(isSome(slot), 'is valid slot');
+      const slotIndex = fromSome(slot, 0);
+      check(slotInfo.renter !== thisAddress, 'has renter');
+      check(!slotInfo.isOpen, 'not open');
+      check(slotInfo.endRentTime > 0, 'valid rent time');
+      check(availableToks <= MAX_POOL_INDEX, 'slot available');
       return [
         handlePmt(0, 0),
         notify => {
-          const updatedPool = pool.set(slotToReclaim, defPoolSlot);
+          enforce(now >= slotInfo.endRentTime, 'rent time passed');
+          const updatedPool = pool.set(slotIndex, defPoolSlot);
           delete Renters[slotInfo.renter];
           notify(null);
           return [rentedToks - 1, availableToks + 1, totPaid, updatedPool];
