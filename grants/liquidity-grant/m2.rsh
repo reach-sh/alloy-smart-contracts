@@ -34,8 +34,8 @@ export const pool = Reach.App(() => {
   });
   const V = View({
     stats: Stats,
-    getLender: Fun([Address], PoolSlot),
-    getRenter: Fun([Address], PoolSlot),
+    getLender: Fun([Address], Tuple(Bool, PoolSlot)),
+    getRenter: Fun([Address], Tuple(Bool, PoolSlot)),
   });
 
   init();
@@ -110,12 +110,12 @@ export const pool = Reach.App(() => {
         })
       );
       V.getLender.set(addy => {
-        const [_, slotInfo] = getSlot(addy, false);
-        return slotInfo;
+        const [i, slotInfo] = getSlot(addy, false);
+        return [isSome(i), slotInfo];
       });
       V.getRenter.set(addy => {
-        const [_, slotInfo] = getSlot(addy, true);
-        return slotInfo;
+        const [i, slotInfo] = getSlot(addy, true);
+        return [isSome(i), slotInfo];
       });
     })
     .invariant(balance(tok) === totalToks)
@@ -167,7 +167,7 @@ export const pool = Reach.App(() => {
       const chkCanRent = who => {
         check(availableToks > 0, 'is available');
         check(isNone(Renters[who]), 'is renter');
-        check(rentedToks <= MAX_POOL_INDEX, 'array bounds check')
+        check(rentedToks <= MAX_POOL_INDEX, 'array bounds check');
         check(pool[rentedToks].isOpen, 'is taken');
       };
     })

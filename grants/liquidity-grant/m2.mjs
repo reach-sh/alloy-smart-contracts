@@ -44,11 +44,11 @@ const getSlotInfo = async (a, lender) => {
     return null;
   };
   if (lender) {
-    const [_p, i] = await v.getLender(addy);
-    return fmtInfo(i);
+    const [_p, [isLender, info]] = await v.getLender(addy);
+    return isLender ? fmtInfo(info) : null;
   } else {
-    const [_p, i] = await v.getRenter(addy);
-    return fmtInfo(i);
+    const [_p, [isRenter, info]] = await v.getRenter(addy);
+    return isRenter ? fmtInfo(info) : null;
   }
 };
 
