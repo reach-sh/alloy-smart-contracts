@@ -1,7 +1,7 @@
 'reach 0.1';
 'use strict';
 
-const STARTING_RENT_PRICE = 1_000_000;
+const INITIAL_RENT_PRICE = 1_000_000;
 
 const RENT_BLOCKS = 100;
 
@@ -33,6 +33,7 @@ export const pool = Reach.App(() => {
     reclaim: Fun([], Null),
   });
   const V = View({
+    ctcAddress: Address,
     stats: Stats,
     getLender: Fun([Address], Tuple(Bool, PoolSlot)),
     getRenter: Fun([Address], Tuple(Bool, PoolSlot)),
@@ -48,6 +49,7 @@ export const pool = Reach.App(() => {
   Creator.interact.ready();
 
   const thisAddress = getAddress();
+  V.ctcAddress.set(thisAddress);
 
   const defPoolSlot = PoolSlot.fromObject({
     renter: thisAddress,
@@ -73,10 +75,9 @@ export const pool = Reach.App(() => {
       const nextRentIndex = rentedToks;
       const totalToks = availableToks + rentedToks;
       // rent price is affected based on how many tokens are being rented at a given time
+      // TODO: make better formula
       const rentPrice =
-        rentedToks === 0
-          ? STARTING_RENT_PRICE
-          : rentedToks * STARTING_RENT_PRICE;
+        rentedToks === 0 ? INITIAL_RENT_PRICE : rentedToks * INITIAL_RENT_PRICE;
 
       const getTime = addTime => thisConsensusTime() + addTime;
       const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
@@ -102,6 +103,7 @@ export const pool = Reach.App(() => {
           return [Maybe(UInt).Some(slotIndex), slotInfo];
         }
       };
+
       V.stats.set(
         Stats.fromObject({
           rentPrice,
@@ -147,7 +149,7 @@ export const pool = Reach.App(() => {
       return [
         handlePmt(0, 0),
         notify => {
-          enforce(now >= slotInfo.endRentTime, 'rent time passed');
+          enforce(now >= slotInfo.endRentTime, 'is rented');
           const updatedPool = mkNullEndArr(indexToremove);
           delete Lenders[this];
           notify(null);
@@ -188,10 +190,8 @@ export const pool = Reach.App(() => {
       const now = getTime(0);
       const [s, slotInfo] = getSlot(this, false);
       check(isSome(s), 'is valid slot');
+      check(slotInfo.renter !== thisAddress, 'is being rented');
       const slotIndex = fromSome(s, 0);
-      check(slotInfo.renter !== thisAddress, 'has renter');
-      check(!slotInfo.isOpen, 'not open');
-      check(slotInfo.endRentTime > 0, 'valid rent time');
       check(availableToks <= MAX_POOL_INDEX, 'slot available');
       return [
         handlePmt(0, 0),

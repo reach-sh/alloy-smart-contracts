@@ -7,7 +7,7 @@ const bal = stdlib.parseCurrency(1000);
 
 const accDeployer = await stdlib.newTestAccount(bal);
 const lenderAccounts = await stdlib.newTestAccounts(10, bal);
-const renterAccounts = await stdlib.newTestAccounts(9, bal);
+const renterAccounts = await stdlib.newTestAccounts(10, bal);
 
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
@@ -34,6 +34,8 @@ await stdlib.withDisconnect(() =>
   })
 );
 const ctcInfo = await ctcMachine.getInfo();
+const [_a, add] = await ctcMachine.v.ctcAddress()
+const ctcAddress = fmtAddr(add)
 
 const getSlotInfo = async (a, lender) => {
   const acc = await stdlib.newTestAccount(bal);
@@ -80,6 +82,9 @@ const logViews = async (a, lender) => {
 };
 
 // list NFT's
+console.log('');
+console.log('Listing');
+console.log('');
 for (const a of lenderAccounts) {
   await a.tokenAccept(nft.id);
   await stdlib.transfer(accDeployer, a, 100, nft.id);
@@ -89,6 +94,9 @@ for (const a of lenderAccounts) {
 }
 
 // rent NFT's
+console.log('');
+console.log('Renting');
+console.log('');
 for (const a of renterAccounts) {
   const ctc = a.contract(backend, ctcInfo);
   await ctc.a.rent();
@@ -96,6 +104,9 @@ for (const a of renterAccounts) {
 }
 
 // reclaim NFT's
+console.log('');
+console.log('Reclaiming');
+console.log('');
 for (const a of lenderAccounts) {
   const ctc = a.contract(backend, ctcInfo);
   const slotInfo = await getSlotInfo(a, true);
@@ -106,6 +117,9 @@ for (const a of lenderAccounts) {
 }
 
 // delist NFT's
+console.log('');
+console.log('Delisting');
+console.log('');
 for (const a of lenderAccounts) {
   const ctc = a.contract(backend, ctcInfo);
   await ctc.a.delist();
