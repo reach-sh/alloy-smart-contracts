@@ -141,11 +141,11 @@ export const pool = Reach.App(() => {
     })
     .define(() => {
       const chkCanDelist = who => {
+        check(isSome(Lenders[who]), 'is lender');
         const [slot, _] = getSlot(who, false);
-        check(isSome(slot));
+        check(isSome(slot), 'is valid slot');
         const indexToremove = fromSome(slot, 0);
-        check(indexToremove <= MAX_POOL_INDEX);
-        check(balance(tok) > 0);
+        check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
         check(availableToks > 0);
         return indexToremove;
       };
@@ -200,7 +200,7 @@ export const pool = Reach.App(() => {
       const chkCanReclaim = who => {
         const now = getTime(0);
         const [slot, slotInfo] = getSlot(who, false);
-        check(isSome(slot));
+        check(isSome(slot), 'is valid slot');
         const s = fromSome(slot, 0);
         check(slotInfo.renter !== thisAddress, 'has renter');
         check(!slotInfo.isOpen, 'not open');
