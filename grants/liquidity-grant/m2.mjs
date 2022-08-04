@@ -6,8 +6,8 @@ const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
 
 const accDeployer = await stdlib.newTestAccount(bal);
-const lenderAccounts = await stdlib.newTestAccounts(20, bal);
-const renterAccounts = await stdlib.newTestAccounts(20, bal);
+const lenderAccounts = await stdlib.newTestAccounts(10, bal);
+const renterAccounts = await stdlib.newTestAccounts(9, bal);
 
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
@@ -78,8 +78,6 @@ const logViews = async (a, lender) => {
   };
   console.log(result);
 };
-// initial views after deploy
-await logViews();
 
 // list NFT's
 for (const a of lenderAccounts) {
@@ -113,4 +111,3 @@ for (const a of lenderAccounts) {
   await ctc.a.delist();
   await logViews(a, true);
 }
-

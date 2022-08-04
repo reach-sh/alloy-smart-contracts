@@ -136,15 +136,18 @@ export const pool = Reach.App(() => {
       ];
     })
     .api_(api.delist, () => {
-      check(availableToks > 0, 'has token to reclaim');
+      const now = getTime(0);
+      check(availableToks > 0, 'token to reclaim');
       check(isSome(Lenders[this]), 'is lender');
-      const [slot, _] = getSlot(this, false);
-      check(isSome(slot), 'is valid slot');
-      const indexToremove = fromSome(slot, 0);
+      const [s, slotInfo] = getSlot(this, false);
+      check(isSome(s), 'is valid slot');
+      check(slotInfo.renter === thisAddress, 'has renter');
+      const indexToremove = fromSome(s, 0);
       check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
       return [
         handlePmt(0, 0),
         notify => {
+          enforce(now >= slotInfo.endRentTime, 'rent time passed');
           const updatedPool = mkNullEndArr(indexToremove);
           delete Lenders[this];
           notify(null);
@@ -183,9 +186,9 @@ export const pool = Reach.App(() => {
     })
     .api_(api.reclaim, () => {
       const now = getTime(0);
-      const [slot, slotInfo] = getSlot(this, false);
-      check(isSome(slot), 'is valid slot');
-      const slotIndex = fromSome(slot, 0);
+      const [s, slotInfo] = getSlot(this, false);
+      check(isSome(s), 'is valid slot');
+      const slotIndex = fromSome(s, 0);
       check(slotInfo.renter !== thisAddress, 'has renter');
       check(!slotInfo.isOpen, 'not open');
       check(slotInfo.endRentTime > 0, 'valid rent time');
