@@ -13,7 +13,7 @@ const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
 const wait = async t => {
   console.log('waiting for rent time to pass...');
-  await stdlib.waitUntilTime(stdlib.bigNumberify(t));
+  await stdlib.waitUntilSecs(stdlib.bigNumberify(t));
 };
 
 const nft = await stdlib.launchToken(

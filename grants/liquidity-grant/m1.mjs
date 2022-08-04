@@ -1,36 +1,20 @@
 import { loadStdlib } from '@reach-sh/stdlib';
-import * as backend from './build/index.owner.mjs';
-import * as announcerBackend from './build/announcer.main.mjs';
+import * as backend from './build/m1.renter.mjs';
 
 const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
-const userAccs = await stdlib.newTestAccounts(3, bal);
+const userAccs = await stdlib.newTestAccounts(2, bal);
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
+const wait = async t => {
+  console.log('waiting for rent time to pass...');
+  await stdlib.waitUntilSecs(stdlib.bigNumberify(t));
+};
 
-const accDeployer = userAccs[0];
+const accCreator = userAccs[0];
 const accRenter = userAccs[1];
 
-const ctcMachine = accDeployer.contract(backend);
-const ctcMachin2 = accDeployer.contract(backend);
-const announcer = accDeployer.contract(announcerBackend);
-
-// deploy contract
-await stdlib.withDisconnect(() =>
-  announcer.p.Deployer({
-    ready: stdlib.disconnect,
-  })
-);
-const annCTCInfo = await announcer.getInfo();
-
-const acc3 = userAccs[2];
-const ctcAnnouncer = acc3.contract(
-  announcerBackend,
-  stdlib.bigNumberToNumber(annCTCInfo)
-);
-const {
-  a: annApi,
-} = ctcAnnouncer;
+const ctcMachine = accCreator.contract(backend);
 
 // deploy contract
 await stdlib.withDisconnect(() =>
@@ -41,32 +25,46 @@ await stdlib.withDisconnect(() =>
   })
 );
 
-// deploy contract
-await stdlib.withDisconnect(() =>
-  ctcMachin2.p.Creator({
-    name: 'Zeaus',
-    symbol: 'ZEUS',
-    ready: stdlib.disconnect,
-  })
-);
-
 const ctcInfo = await ctcMachine.getInfo();
-const ctcInfo2 = await ctcMachin2.getInfo();
-// testing announcer
-await annApi.announce(ctcInfo);
-await annApi.announce(ctcInfo2);
-const { a: a1 } = ctcMachine;
-await a1.makeAvailable();
 
+const logViews = async () => {
+  const acc = await stdlib.newTestAccount(bal);
+  const { v } = acc.contract(backend, ctcInfo);
+  const [_a, stats] = await v.stats();
+  const [_b, creator] = await v.creator();
+  const fmtCreator = fmtAddr(creator);
+  const fmtStats = {
+    ...stats,
+    endRentTime: fmtNum(stats.endRentTime),
+    rentPrice: fmtNum(stats.rentPrice),
+    owner: fmtAddr(stats.owner),
+  };
+  const result = {
+    creator: fmtCreator,
+    stats: fmtStats,
+  };
+  console.log(result);
+  return result
+};
+console.log('initial state')
+await logViews()
+
+// make NFT available to rent from creator
+await ctcMachine.a.makeAvailable();
+console.log('after making available');
+await logViews();
+
+// rent NFT
 const ctcRenter = accRenter.contract(backend, ctcInfo);
-const { a: a2, v } = ctcRenter;
-const [_a, o] = await v.owner();
-console.log('owner', fmtAddr(o));
-await a2.rent();
-const [_b, o1] = await v.owner();
-const [_c, rt] = await v.endRentTime();
-const fmtEndBlock = stdlib.bigNumberToNumber(rt);
-const time = await stdlib.getNetworkTime();
-console.log('time', fmtNum(time));
-console.log('fmtEndBlock', fmtEndBlock);
-console.log('owner', fmtAddr(o1));
+await ctcRenter.a.rent()
+console.log('after being rented');
+await logViews();
+
+// end rent
+const x = await ctcMachine.v.stats()
+const endRentTime = fmtNum(x[1].endRentTime)
+await wait(endRentTime);
+await ctcMachine.a.endRent();
+console.log('after rent ended');
+await logViews();
+

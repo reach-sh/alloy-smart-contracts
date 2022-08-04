@@ -1,12 +1,18 @@
 'reach 0.1';
 'use strict';
 
-const STARTING_RENT_PRICE = 1_000_000;
-const SECONDS_PER_BLOCK = 9 / 2; // 4.5 seconds per block on Algorand
-const ONE_MINUTE = 60 / SECONDS_PER_BLOCK;
-const ONE_HOUR = ONE_MINUTE * 60;
+const RENT_PRICE = 1_000_000;
 
-export const owner = Reach.App(() => {
+const ONE_MINUTE = 60;
+
+const Stats = Struct([
+  ['owner', Address],
+  ['rentPrice', UInt],
+  ['isAvailable', Bool],
+  ['endRentTime', UInt],
+]);
+
+export const renter = Reach.App(() => {
   const Creator = Participant('Creator', {
     name: Bytes(50),
     symbol: Bytes(10),
@@ -18,12 +24,8 @@ export const owner = Reach.App(() => {
     endRent: Fun([], Null),
   });
   const V = View({
-    owner: Address,
-    endRentTime: UInt,
-    rentPrice: UInt,
-    numOfRenters: UInt,
-    isAvailable: Bool,
     creator: Address,
+    stats: Stats,
   });
 
   init();
@@ -33,20 +35,17 @@ export const owner = Reach.App(() => {
 
   V.creator.set(Creator);
 
-  const [
-    isAvailable,
-    renter,
-    startRentTime,
-    rentEndTime,
-    rentPrice,
-    numOfRenters,
-  ] = parallelReduce([false, Creator, 0, 0, STARTING_RENT_PRICE, 0])
+  const [isAvailable, renter, rentEndTime] = parallelReduce([false, Creator, 0])
     .define(() => {
-      V.owner.set(rentEndTime > 0 ? renter : Creator);
-      V.endRentTime.set(rentEndTime);
-      V.rentPrice.set(rentPrice);
-      V.numOfRenters.set(numOfRenters);
-      V.isAvailable.set(isAvailable);
+      V.stats.set(
+        Stats.fromObject({
+          owner: rentEndTime > 0 ? renter : Creator,
+          rentPrice: RENT_PRICE,
+          isAvailable: isAvailable,
+          endRentTime: rentEndTime,
+        })
+      );
+      const getTime = () => thisConsensusSecs();
     })
     .invariant(balance() === 0)
     .while(true)
@@ -57,55 +56,34 @@ export const owner = Reach.App(() => {
         0,
         notify => {
           notify(null);
-          return [
-            true,
-            renter,
-            startRentTime,
-            rentEndTime,
-            rentPrice,
-            numOfRenters,
-          ];
+          return [true, renter, rentEndTime];
         },
       ];
-    })
-    .define(() => {
-      const now = thisConsensusTime();
     })
     .api_(api.rent, () => {
+      const now = getTime();
       check(isAvailable, 'is available to rent');
       check(renter !== this, 'is renter');
-      check(now >= rentEndTime, 'rent time is up');
       return [
-        rentPrice,
+        RENT_PRICE,
         notify => {
-          const endRentTime = now + ONE_HOUR;
-          transfer(rentPrice).to(Creator);
+          const endRentTime = now + ONE_MINUTE;
+          transfer(RENT_PRICE).to(Creator);
           notify(null);
-          return [
-            isAvailable,
-            this,
-            now,
-            endRentTime,
-            rentPrice,
-            numOfRenters + 1,
-          ];
+          return [false, this, endRentTime];
         },
       ];
     })
-    .define(() => {
-      const checkCanEndRent = () => {
-        check(rentEndTime > 0, 'is being rented');
-        check(now >= rentEndTime, 'is rent period up');
-      };
-    })
     .api_(api.endRent, () => {
+      const now = getTime();
       check(this === Creator, 'is creator');
-      checkCanEndRent();
+      check(rentEndTime > 0 && !isAvailable, 'is being rented');
       return [
         0,
         notify => {
+          enforce(now >= rentEndTime, 'is rented');
           notify(null);
-          return [isAvailable, Creator, 0, 0, rentPrice, numOfRenters];
+          return [isAvailable, Creator, 0];
         },
       ];
     });

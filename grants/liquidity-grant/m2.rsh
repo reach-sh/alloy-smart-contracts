@@ -3,7 +3,7 @@
 
 const INITIAL_RENT_PRICE = 1_000_000;
 
-const RENT_BLOCKS = 100;
+const ONE_MINUTE = 60;
 
 const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
@@ -79,7 +79,7 @@ export const pool = Reach.App(() => {
       const rentPrice =
         rentedToks === 0 ? INITIAL_RENT_PRICE : rentedToks * INITIAL_RENT_PRICE;
 
-      const getTime = addTime => thisConsensusTime() + addTime;
+      const getTime = addTime => thisConsensusSecs() + addTime;
       const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
       const mkNullEndArr = i => {
         assert(i <= MAX_POOL_INDEX);
@@ -163,7 +163,7 @@ export const pool = Reach.App(() => {
       check(isNone(Renters[this]), 'is renter');
       check(rentedToks <= MAX_POOL_INDEX, 'array bounds check');
       check(pool[rentedToks].isOpen, 'is slot available');
-      const endRentTime = getTime(RENT_BLOCKS);
+      const endRentTime = getTime(ONE_MINUTE);
       return [
         handlePmt(rentPrice, 0),
         notify => {
