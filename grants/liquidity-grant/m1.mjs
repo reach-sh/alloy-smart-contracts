@@ -3,7 +3,7 @@ import * as backend from './build/m1.renter.mjs';
 
 const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
-const userAccs = await stdlib.newTestAccounts(2, bal);
+
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
 const wait = async t => {
@@ -11,21 +11,25 @@ const wait = async t => {
   await stdlib.waitUntilSecs(stdlib.bigNumberify(t));
 };
 
-const accCreator = userAccs[0];
-const accRenter = userAccs[1];
-
-const ctcMachine = accCreator.contract(backend);
-
-// deploy contract
-await stdlib.withDisconnect(() =>
-  ctcMachine.p.Creator({
-    name: 'Zeaus',
-    symbol: 'ZEUS',
-    ready: stdlib.disconnect,
-  })
-);
-
-const ctcInfo = await ctcMachine.getInfo();
+let ctcInfo, ctcMachine;
+const launchNFT = async (makeAvailable = true) => {
+  const accDeployer = await stdlib.newTestAccount(bal);
+  const ctc = accDeployer.contract(backend);
+  // deploy contract
+  await stdlib.withDisconnect(() =>
+    ctc.p.Creator({
+      name: 'Zeaus',
+      symbol: 'ZEUS',
+      ready: stdlib.disconnect,
+    })
+  );
+  const i = await ctc.getInfo();
+  if (makeAvailable) {
+    await ctc.a.makeAvailable();
+  }
+  ctcInfo = i;
+  ctcMachine = ctc;
+};
 
 const logViews = async () => {
   const acc = await stdlib.newTestAccount(bal);
@@ -44,27 +48,89 @@ const logViews = async () => {
     stats: fmtStats,
   };
   console.log(result);
-  return result
+  return result;
 };
-console.log('initial state')
-await logViews()
 
-// make NFT available to rent from creator
-await ctcMachine.a.makeAvailable();
-console.log('after making available');
-await logViews();
+const chkErr = async (lab, test) => {
+  let error = null;
+  try {
+    await test();
+  } catch (err) {
+    error = err;
+  }
+  if (!error) throw new Error(`${lab} should have failed`);
+};
 
-// rent NFT
-const ctcRenter = accRenter.contract(backend, ctcInfo);
-await ctcRenter.a.rent()
-console.log('after being rented');
-await logViews();
+// can list, make available, rent, and end rent
+const gneralTest = async () => {
+  await launchNFT();
+  const accRenter = await stdlib.newTestAccount(bal);
+  const ctcRenter = accRenter.contract(backend, ctcInfo);
+  await ctcRenter.a.rent();
+  await logViews();
+  const x = await ctcMachine.v.stats();
+  const endRentTime = fmtNum(x[1].endRentTime);
+  await wait(endRentTime);
+  await ctcMachine.a.endRent();
+  await logViews();
+};
 
-// end rent
-const x = await ctcMachine.v.stats()
-const endRentTime = fmtNum(x[1].endRentTime)
-await wait(endRentTime);
-await ctcMachine.a.endRent();
-console.log('after rent ended');
-await logViews();
+// can NOT end rent before rent time is up
+const advTest1 = async () => {
+  await launchNFT();
+  await chkErr('not delist while rented', async () => {
+    const accRenter = await stdlib.newTestAccount(bal);
+    const ctcRenter = accRenter.contract(backend, ctcInfo);
+    await ctcRenter.a.rent();
+    await ctcMachine.a.endRent();
+  });
+  await logViews();
+};
 
+// can NOT end rent before rent time is up
+const advTest2 = async () => {
+  await launchNFT();
+  await chkErr('not rent while rented', async () => {
+    const accRenter = await stdlib.newTestAccount(bal);
+    const accRenter2 = await stdlib.newTestAccount(bal);
+    const ctcRenter = accRenter.contract(backend, ctcInfo);
+    const ctcRenter2 = accRenter2.contract(backend, ctcInfo);
+    await ctcRenter.a.rent();
+    await ctcRenter2.a.rent();
+  });
+  await logViews();
+};
+
+// renter can NOT make available
+const advTest3 = async () => {
+  await launchNFT();
+  await chkErr('renter can not make available', async () => {
+    const accRenter = await stdlib.newTestAccount(bal);
+    const ctcRenter = accRenter.contract(backend, ctcInfo);
+    await ctcRenter.a.rent();
+    await ctcRenter.a.makeAvailable();
+  });
+  await logViews();
+};
+
+// renter can NOT end rent
+const advTest4 = async () => {
+  await launchNFT();
+  await chkErr('renter can not make available', async () => {
+    const accRenter = await stdlib.newTestAccount(bal);
+    const ctcRenter = accRenter.contract(backend, ctcInfo);
+    await ctcRenter.a.rent();
+    await ctcRenter.a.endRent();
+  });
+  await logViews();
+};
+
+const runTests = async () => {
+  await gneralTest();
+  await advTest1();
+  await advTest2();
+  await advTest3();
+  await advTest4();
+};
+
+await runTests();
