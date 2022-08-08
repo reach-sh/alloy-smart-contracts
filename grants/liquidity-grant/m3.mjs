@@ -1,5 +1,5 @@
 import { loadStdlib } from '@reach-sh/stdlib';
-import * as backend from './build/m2.pool.mjs';
+import * as backend from './build/m3.pool.mjs';
 
 const stdlib = loadStdlib('ALGO');
 const bal = stdlib.parseCurrency(1000);
@@ -45,7 +45,6 @@ const getSlotInfo = async (a, lender) => {
         owner: fmtAddr(i.owner),
         renter: fmtAddr(i.renter),
         endRentTime: fmtNum(i.endRentTime),
-        reserve: fmtNum(i.reserve),
       };
     return null;
   };
@@ -65,7 +64,9 @@ const logViews = async (a, lender) => {
   const fmtAvailable = fmtNum(stats.available);
   const fmtTotal = fmtNum(stats.total);
   const fmtRented = fmtNum(stats.rented);
+  const fmtRentPrice = stdlib.formatCurrency(stats.rentPrice);
   const fmtTotalPaid = stdlib.formatCurrency(stats.totalPaid);
+
   let info;
   if (a) {
     info = await getSlotInfo(a, lender);
@@ -75,6 +76,7 @@ const logViews = async (a, lender) => {
     total: fmtTotal,
     rented: fmtRented,
     totalPaid: `${fmtTotalPaid} ALGO`,
+    rentPrice: `${fmtRentPrice} ALGO`,
     info,
   };
   console.log(result);
@@ -86,8 +88,7 @@ const listNft = async (amt = 1) => {
     await a.tokenAccept(nftId);
     await stdlib.transfer(funder, a, 100, nftId);
     const ctc = a.contract(backend, ctcInfo);
-    const reserve = stdlib.bigNumberify(Math.floor(Math.random() * 100));
-    await ctc.a.list(reserve);
+    await ctc.a.list();
     await logViews(a, true);
   }
   return lenders;

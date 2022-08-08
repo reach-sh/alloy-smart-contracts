@@ -1,6 +1,11 @@
 'reach 0.1';
 'use strict';
 
+/* GOAL */
+// Demonstrate concept via rentable NFTs with
+// accompanying frontend that can determine if
+// ownership is held for the entire period of use.
+
 const RENT_PRICE = 1_000_000;
 
 const ONE_MINUTE = 60;

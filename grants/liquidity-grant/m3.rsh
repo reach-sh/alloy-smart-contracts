@@ -2,25 +2,24 @@
 'use strict';
 
 /* GOAL */
-// Expand the rentable NFT concept by making a
-// basic pooled rentable NFT where N rents may be
-// generated given N real NFTs, where each NFT
-// has its own reserve price and are rented in order.
+// Expand the pooled rentable NFT concept by
+// adding the fractional reserve concept and
+// incorporating a price discovery mechanism where
+// more rental volumes automatically creates higher
+// prices which leads to greater yields to the real owners.
+
+const INITIAL_RENT_PRICE = 1_000_000;
 
 const ONE_MINUTE = 60;
-const ONE_ALGO = 1_000_000; // 1 ALGO = 1000000 micro ALGO
 
 const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
-
-const mkAlgoPrice = amt => amt * ONE_ALGO;
 
 const PoolSlot = Struct([
   ['owner', Address],
   ['renter', Address],
   ['endRentTime', UInt],
   ['isOpen', Bool],
-  ['reserve', UInt],
 ]);
 
 const Stats = Struct([
@@ -28,6 +27,7 @@ const Stats = Struct([
   ['total', UInt],
   ['rented', UInt],
   ['totalPaid', UInt],
+  ['rentPrice', UInt],
 ]);
 
 export const pool = Reach.App(() => {
@@ -36,7 +36,7 @@ export const pool = Reach.App(() => {
     ready: Fun([], Null),
   });
   const api = API({
-    list: Fun([UInt], Null),
+    list: Fun([], Null),
     delist: Fun([], Null),
     rent: Fun([], UInt),
     reclaim: Fun([], Null),
@@ -65,9 +65,6 @@ export const pool = Reach.App(() => {
     renter: thisAddress,
     endRentTime: 0,
     isOpen: false,
-    // Currently, the rent price is static to satisfy this milestones which makes the reserve pointless
-    // But every renter/NFT has a reserve price :)
-    reserve: 0,
   };
 
   const Lenders = new Map(Maybe(UInt));
@@ -86,6 +83,11 @@ export const pool = Reach.App(() => {
       // I get assigned index/slot 0 and the availableToks value increments by one
       const nextAvailIndex = availableToks;
       const nextRentIndex = rentedToks;
+      // rent price is affected based on how many tokens are being rented at any given time
+      const rentPrice =
+        rentedToks === 0
+          ? INITIAL_RENT_PRICE
+          : (rentedToks === 1 ? 2 : rentedToks) * INITIAL_RENT_PRICE;
       const totalToks = availableToks + rentedToks;
       const getTime = addTime => thisConsensusSecs() + addTime;
       const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
@@ -122,6 +124,7 @@ export const pool = Reach.App(() => {
           total: totalToks,
           rented: rentedToks,
           totalPaid: totPaid,
+          rentPrice,
         })
       );
       V.getLender.set(addy => {
@@ -137,10 +140,9 @@ export const pool = Reach.App(() => {
     .invariant(balance() === 0)
     .invariant(availableToks <= POOL_SIZE)
     .while(true)
-    .api_(api.list, rP => {
+    .api_(api.list, () => {
       check(isNone(Lenders[this]), 'is lender');
       check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
-      const reservePrice = mkAlgoPrice(rP);
       return [
         handlePmt(0, 1),
         notify => {
@@ -151,7 +153,6 @@ export const pool = Reach.App(() => {
               ...defPoolSlot,
               owner: this,
               isOpen: true,
-              reserve: reservePrice,
             })
           );
           notify(null);
@@ -183,11 +184,11 @@ export const pool = Reach.App(() => {
     .api_(api.rent, () => {
       check(availableToks > 0, 'is available');
       check(nextRentIndex <= MAX_POOL_INDEX, 'array bounds check');
-      const { isOpen, owner, reserve } = pool[nextRentIndex];
+      const { isOpen, owner } = pool[nextRentIndex];
       check(isOpen, 'is slot available');
+      check(owner !== thisAddress, 'valid owner');
       check(isNone(Renters[this]), 'is renter');
       const endRentTime = getTime(ONE_MINUTE);
-      const rentPrice = ONE_ALGO;
       return [
         handlePmt(rentPrice, 0),
         notify => {
@@ -195,11 +196,10 @@ export const pool = Reach.App(() => {
           const updatedPool = pool.set(
             nextRentIndex,
             PoolSlot.fromObject({
-              owner: owner,
+              owner,
+              endRentTime,
               isOpen: false,
               renter: this,
-              reserve,
-              endRentTime,
             })
           );
           Renters[this] = Maybe(UInt).Some(nextRentIndex);
