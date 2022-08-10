@@ -8,12 +8,10 @@
 // has its own reserve price and are rented in order.
 
 const ONE_MINUTE = 60;
-const ONE_ALGO = 1_000_000; // 1 ALGO = 1000000 micro ALGO
+const RENT_PRICE = 1_000_000; // 1 ALGO
 
 const POOL_SIZE = 20;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
-
-const mkAlgoPrice = amt => amt * ONE_ALGO;
 
 const PoolSlot = Struct([
   ['owner', Address],
@@ -65,8 +63,6 @@ export const pool = Reach.App(() => {
     renter: thisAddress,
     endRentTime: 0,
     isOpen: false,
-    // Currently, the rent price is static to satisfy this milestones which makes the reserve pointless
-    // But every renter/NFT has a reserve price :)
     reserve: 0,
   };
 
@@ -140,7 +136,7 @@ export const pool = Reach.App(() => {
     .api_(api.list, rP => {
       check(isNone(Lenders[this]), 'is lender');
       check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
-      const reservePrice = mkAlgoPrice(rP);
+      check(RENT_PRICE > rP, 'rent price below reserve price')
       return [
         handlePmt(0, 1),
         notify => {
@@ -151,7 +147,7 @@ export const pool = Reach.App(() => {
               ...defPoolSlot,
               owner: this,
               isOpen: true,
-              reserve: reservePrice,
+              reserve: rP,
             })
           );
           notify(null);
@@ -187,11 +183,10 @@ export const pool = Reach.App(() => {
       check(isOpen, 'is slot available');
       check(isNone(Renters[this]), 'is renter');
       const endRentTime = getTime(ONE_MINUTE);
-      const rentPrice = ONE_ALGO;
       return [
-        handlePmt(rentPrice, 0),
+        handlePmt(RENT_PRICE, 0),
         notify => {
-          transfer(rentPrice).to(owner);
+          transfer(RENT_PRICE).to(owner);
           const updatedPool = pool.set(
             nextRentIndex,
             PoolSlot.fromObject({
@@ -207,7 +202,7 @@ export const pool = Reach.App(() => {
           return [
             rentedToks + 1,
             availableToks - 1,
-            totPaid + rentPrice,
+            totPaid + RENT_PRICE,
             updatedPool,
           ];
         },
