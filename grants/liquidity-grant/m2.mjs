@@ -75,18 +75,18 @@ const logViews = async (a, lender) => {
     total: fmtTotal,
     rented: fmtRented,
     totalPaid: `${fmtTotalPaid} ALGO`,
-    info,
+    rentalInfo: info,
   };
   console.log(result);
 };
 
-const listNft = async (amt = 1) => {
+const listNft = async (amt = 1, r = 1) => {
   const lenders = await stdlib.newTestAccounts(amt, bal);
   for (const a of lenders) {
     await a.tokenAccept(nftId);
     await stdlib.transfer(funder, a, 100, nftId);
     const ctc = a.contract(backend, ctcInfo);
-    const reserve = stdlib.bigNumberify(Math.floor(Math.random() * 100));
+    const reserve = stdlib.parseCurrency(r);
     await ctc.a.list(reserve);
     await logViews(a, true);
   }
@@ -150,7 +150,7 @@ const delistTest = async () => {
   await delistNft(lenders);
 };
 
-// can NFT's be listed and delisted
+// can NFT's be listed and reclaimed
 const reclaimTest = async () => {
   await setUp();
   const lenders = await listNft(10);
@@ -187,6 +187,14 @@ const advTest3 = async () => {
   });
 };
 
+// can NOT list if reserve to high
+const advTest4 = async () => {
+  await setUp();
+  await chkErr('not rent if reserve to high', async () => {
+    await listNft(1, 100);
+  });
+};
+
 const runTests = async () => {
   await generalTest();
   await reclaimTest();
@@ -194,6 +202,7 @@ const runTests = async () => {
   await advTest1();
   await advTest2();
   await advTest3();
+  await advTest4();
 };
 
 await runTests();

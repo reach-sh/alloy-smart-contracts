@@ -136,7 +136,7 @@ export const pool = Reach.App(() => {
     .api_(api.list, rP => {
       check(isNone(Lenders[this]), 'is lender');
       check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
-      check(RENT_PRICE > rP, 'rent price below reserve price')
+      check(RENT_PRICE >= rP, 'rent price below reserve price')
       return [
         handlePmt(0, 1),
         notify => {

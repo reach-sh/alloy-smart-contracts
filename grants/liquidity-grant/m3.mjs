@@ -66,29 +66,32 @@ const logViews = async (a, lender) => {
   const fmtRented = fmtNum(stats.rented);
   const fmtRentPrice = stdlib.formatCurrency(stats.rentPrice);
   const fmtTotalPaid = stdlib.formatCurrency(stats.totalPaid);
+  const fmtReserve = fmtNum(stats.reserve);
 
   let info;
   if (a) {
     info = await getSlotInfo(a, lender);
   }
   const result = {
+    reserve: fmtReserve,
     available: fmtAvailable,
     total: fmtTotal,
     rented: fmtRented,
     totalPaid: `${fmtTotalPaid} ALGO`,
     rentPrice: `${fmtRentPrice} ALGO`,
-    info,
+    rentalInfo: info,
   };
   console.log(result);
 };
 
-const listNft = async (amt = 1) => {
+const listNft = async (amt = 1, r = 1) => {
   const lenders = await stdlib.newTestAccounts(amt, bal);
   for (const a of lenders) {
     await a.tokenAccept(nftId);
     await stdlib.transfer(funder, a, 100, nftId);
     const ctc = a.contract(backend, ctcInfo);
-    await ctc.a.list();
+    const reserve = stdlib.parseCurrency(r);
+    await ctc.a.list(reserve);
     await logViews(a, true);
   }
   return lenders;
@@ -151,7 +154,7 @@ const delistTest = async () => {
   await delistNft(lenders);
 };
 
-// can NFT's be listed and delisted
+// can NFT's be listed and reclaimed
 const reclaimTest = async () => {
   await setUp();
   const lenders = await listNft(10);
@@ -183,8 +186,15 @@ const advTest2 = async () => {
 const advTest3 = async () => {
   await setUp();
   await chkErr('not rent if none are available', async () => {
-    await listNft(1);
     await rentNft(2);
+  });
+};
+
+// can NOT list if reserve to high
+const advTest4 = async () => {
+  await setUp();
+  await chkErr('not rent if reserve to high', async () => {
+    await listNft(1, 100);
   });
 };
 
@@ -195,6 +205,7 @@ const runTests = async () => {
   await advTest1();
   await advTest2();
   await advTest3();
+  await advTest4();
 };
 
 await runTests();

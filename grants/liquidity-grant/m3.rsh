@@ -12,7 +12,7 @@ const INITIAL_RENT_PRICE = 1_000_000;
 
 const ONE_MINUTE = 60;
 
-const RESERVE_RATIO = 5;
+const RESERVE_RATIO = 5; // 1:5 reserve ratio - for every one NFT listed, 5 can be rented
 const MAX_RESERVE = 10;
 
 const POOL_SIZE = MAX_RESERVE * RESERVE_RATIO;
@@ -31,6 +31,7 @@ const Stats = Struct([
   ['rented', UInt],
   ['totalPaid', UInt],
   ['rentPrice', UInt],
+  ['reserve', UInt],
 ]);
 
 export const pool = Reach.App(() => {
@@ -39,7 +40,7 @@ export const pool = Reach.App(() => {
     ready: Fun([], Null),
   });
   const api = API({
-    list: Fun([], Null),
+    list: Fun([UInt], Null),
     delist: Fun([], Null),
     rent: Fun([], UInt),
     reclaim: Fun([], Null),
@@ -127,53 +128,23 @@ export const pool = Reach.App(() => {
             return [Maybe(UInt).Some(slotIndex), slotInfo];
           }
         };
-        const listIt = who => {
+        const handleListing = who => {
           const startI = reserveSupply * RESERVE_RATIO;
-          check(startI + 4 <= MAX_POOL_INDEX, 'array check');
+          check(startI + RESERVE_RATIO - 1 <= MAX_POOL_INDEX, 'array check');
+          const slotInfo = PoolSlot.fromObject({
+            ...defPoolSlot,
+            owner: who,
+            isOpen: true,
+          });
           // this is gross
           // I bet there is an easier/cleaner way to do this
           // ideally I would like to loop/update the next 5 indexes in one swoop based on the Reserve ratio/starting index
-          // currently hardcoded as we know the reserve ratio is 5
-          const p1 = pool.set(
-            startI,
-            PoolSlot.fromObject({
-              ...defPoolSlot,
-              owner: who,
-              isOpen: true,
-            })
-          );
-          const p2 = p1.set(
-            startI + 1,
-            PoolSlot.fromObject({
-              ...defPoolSlot,
-              owner: who,
-              isOpen: true,
-            })
-          );
-          const p3 = p2.set(
-            startI + 2,
-            PoolSlot.fromObject({
-              ...defPoolSlot,
-              owner: who,
-              isOpen: true,
-            })
-          );
-          const p4 = p3.set(
-            startI + 3,
-            PoolSlot.fromObject({
-              ...defPoolSlot,
-              owner: who,
-              isOpen: true,
-            })
-          );
-          const p5 = p4.set(
-            startI + 4,
-            PoolSlot.fromObject({
-              ...defPoolSlot,
-              owner: who,
-              isOpen: true,
-            })
-          );
+          // currently hardcoded amounts as we know the reserve ratio is 5 and thus have to update the 5 relevent indices
+          const p1 = pool.set(startI, slotInfo);
+          const p2 = p1.set(startI + 1, slotInfo);
+          const p3 = p2.set(startI + 2, slotInfo);
+          const p4 = p3.set(startI + 3, slotInfo);
+          const p5 = p4.set(startI + 4, slotInfo);
           return p5;
         };
 
@@ -184,6 +155,7 @@ export const pool = Reach.App(() => {
             rented: rentedToks,
             totalPaid: totPaid,
             rentPrice,
+            reserve: reserveSupply,
           })
         );
         V.getLender.set(addy => {
@@ -201,9 +173,9 @@ export const pool = Reach.App(() => {
       .invariant(balance() === 0)
       .invariant(maxAvailble === reserveSupply * RESERVE_RATIO)
       .while(true)
-      .api_(api.list, () => {
+      .api_(api.list, rP => {
+        check(rentPrice >= rP, 'reserve too high');
         check(isNone(Lenders[this]), 'is lender');
-        check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
         check(reserveSupply * RESERVE_RATIO <= MAX_POOL_INDEX, 'not available');
         return [
           handlePmt(0, 1),
@@ -211,11 +183,11 @@ export const pool = Reach.App(() => {
             Lenders[this] = [
               [
                 Maybe(UInt).Some(reserveSupply),
-                Maybe(UInt).Some(reserveSupply + 4),
+                Maybe(UInt).Some(reserveSupply + RESERVE_RATIO - 1),
               ],
               Maybe(UInt).Some(reserveSupply),
             ];
-            const updatedPool = listIt(this);
+            const updatedPool = handleListing(this);
             notify(null);
             return [
               rentedToks,
@@ -229,36 +201,41 @@ export const pool = Reach.App(() => {
       })
       .api_(api.delist, () => {
         const now = getTime(0);
-        check(availableToks > 0, 'token to reclaim');
+        check(reserveSupply > 0, 'token to reclaim');
         check(isSome(Lenders[this]), 'is lender');
         const [[strt, end], s] = getLenderInfo(this);
         check(isSome(s), 'is valid slot');
-        const fsS = fromSome(s, 0);
-        check(fsS <= MAX_POOL_INDEX, 'array check');
-        const slotInfo = pool[fsS];
+        const sIndex = fromSome(s, 0);
+        check(sIndex <= MAX_POOL_INDEX, 'array check');
+        const slotInfo = pool[sIndex];
         check(slotInfo.renter === thisAddress, 'has renter');
         const indexToremove = fromSome(s, 0);
         check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
         check(isSome(strt) && isSome(end), 'valid owned range');
-        const fStrt = fromSome(strt, 0);
-        const fEnd = fromSome(end, 0);
-        check(fEnd - 4 === fStrt && fStrt + 4 <= MAX_POOL_INDEX, 'valid range');
+        const rStart = fromSome(strt, 0);
+        const rEnd = fromSome(end, 0);
+        check(
+          rEnd - (RESERVE_RATIO - 1) === rStart &&
+            rStart + (RESERVE_RATIO - 1) <= MAX_POOL_INDEX,
+          'valid range'
+        );
         return [
           handlePmt(0, 0),
           notify => {
             // this is also gross
             // ideally would like to 'loop' or some equivelent based on the reserve ratio to make this dynamic
-            // currently hardcoded as we know the reserve ratio is 5
-            enforce(now >= pool[fStrt].endRentTime);
-            enforce(now >= pool[fStrt + 1].endRentTime);
-            enforce(now >= pool[fStrt + 2].endRentTime);
-            enforce(now >= pool[fStrt + 3].endRentTime);
-            enforce(now >= pool[fStrt + 4].endRentTime);
-            const p1 = mkNullEndArr(pool, fStrt);
-            const p2 = mkNullEndArr(p1, fStrt + 1);
-            const p3 = mkNullEndArr(p2, fStrt + 2);
-            const p4 = mkNullEndArr(p3, fStrt + 3);
-            const p5 = mkNullEndArr(p4, fStrt + 4);
+            // currently hardcoded as we know the reserve ratio is 5 and thus have to update the 5 relevent indices
+            // this currently checks that none of the 'notes' issued buy you are being rented before delisting
+            enforce(now >= pool[rStart].endRentTime);
+            enforce(now >= pool[rStart + 1].endRentTime);
+            enforce(now >= pool[rStart + 2].endRentTime);
+            enforce(now >= pool[rStart + 3].endRentTime);
+            enforce(now >= pool[rStart + 4].endRentTime);
+            const p1 = mkNullEndArr(pool, rStart);
+            const p2 = mkNullEndArr(p1, rStart + 1);
+            const p3 = mkNullEndArr(p2, rStart + 2);
+            const p4 = mkNullEndArr(p3, rStart + 3);
+            const p5 = mkNullEndArr(p4, rStart + 4);
             delete Lenders[this];
             notify(null);
             transfer(1, tok).to(this);
