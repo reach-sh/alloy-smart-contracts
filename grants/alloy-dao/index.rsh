@@ -42,13 +42,11 @@ export const main = Reach.App(() => {
     getInit: Fun([], Tuple(Token, UInt, UInt, UInt, UInt)),
     ready: Fun([], Null),
   });
-  const Voter = API("Voter", {
-    support: Fun([ProposalId, UInt], Null),
-    unsupport: Fun([ProposalId], Null),
-  });
-  const Guy = API("Guy", {
+  const User = API("User", {
     propose: Fun([Action], Null),
     unpropose: Fun([UInt], Null),
+    support: Fun([ProposalId, UInt], Null),
+    unsupport: Fun([ProposalId], Null),
     getUntrackedFunds: Fun([], Null),
   });
   const Notify = Events({
@@ -86,7 +84,7 @@ export const main = Reach.App(() => {
         .invariant(balance() >= 0)
         .while( ! done )
         .paySpec([govToken])
-        .api_(Guy.propose, (action) => {
+        .api_(User.propose, (action) => {
           const mCurProp = proposalMap[this];
           check(isNone(mCurProp));
           return [ [0, [0, govToken]], (k) => {
@@ -96,7 +94,7 @@ export const main = Reach.App(() => {
             return {done, config, govTokensInVotes};
           }]
         })
-        .api_(Guy.unpropose, (timestamp) => {
+        .api_(User.unpropose, (timestamp) => {
           const mCurProp = proposalMap[this];
           check(isSome(mCurProp));
           const curProp = fromSome(mCurProp, [0, 0, Action.Noop(), false]);
@@ -109,7 +107,7 @@ export const main = Reach.App(() => {
             return {done, config, govTokensInVotes};
           }];
         })
-        .api_(Guy.getUntrackedFunds, () => {
+        .api_(User.getUntrackedFunds, () => {
           return [ [0, [0, govToken]], (k) => {
             k(null);
             const _ = getUntrackedFunds();
@@ -117,7 +115,7 @@ export const main = Reach.App(() => {
             return {done, config, govTokensInVotes};
           }];
         })
-        .api_(Voter.support, ([proposer, proposalTime], voteAmount) => {
+        .api_(User.support, ([proposer, proposalTime], voteAmount) => {
           // Check that the proposal exists and that the voter doesn't currently support anything.
           const voter = this;
           const mProp = proposalMap[proposer];
@@ -190,7 +188,7 @@ export const main = Reach.App(() => {
             };
           }];
         })
-        .api_(Voter.unsupport, ([proposer, proposalTime]) => {
+        .api_(User.unsupport, ([proposer, proposalTime]) => {
           const voter = this;
           const mVote = voterMap[voter];
           check(isSome(mVote));
