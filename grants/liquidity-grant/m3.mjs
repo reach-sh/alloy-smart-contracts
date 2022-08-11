@@ -2,7 +2,7 @@ import { loadStdlib } from '@reach-sh/stdlib';
 import * as backend from './build/m3.pool.mjs';
 
 const stdlib = loadStdlib('ALGO');
-const bal = stdlib.parseCurrency(1000);
+const bal = stdlib.parseCurrency(800);
 
 const fmtAddr = addr => stdlib.formatAddress(addr);
 const fmtNum = n => stdlib.bigNumberToNumber(n);
@@ -88,7 +88,7 @@ const listNft = async (amt = 1, r = 1) => {
   const lenders = await stdlib.newTestAccounts(amt, bal);
   for (const a of lenders) {
     await a.tokenAccept(nftId);
-    await stdlib.transfer(funder, a, 100, nftId);
+    await stdlib.transfer(funder, a, 80, nftId);
     const ctc = a.contract(backend, ctcInfo);
     const reserve = stdlib.parseCurrency(r);
     await ctc.a.list(reserve);
@@ -141,8 +141,8 @@ const chkErr = async (lab, test) => {
 // can NFT's be listed, rented, reclaimed, and delisted
 const generalTest = async () => {
   await setUp();
-  const lenders = await listNft(10);
-  await rentNft(10);
+  const lenders = await listNft(8);
+  await rentNft(8);
   await reclaimNft(lenders);
   await delistNft(lenders);
 };
@@ -150,15 +150,15 @@ const generalTest = async () => {
 // can NFT's be listed and delisted
 const delistTest = async () => {
   await setUp();
-  const lenders = await listNft(10);
+  const lenders = await listNft(8);
   await delistNft(lenders);
 };
 
 // can NFT's be listed and reclaimed
 const reclaimTest = async () => {
   await setUp();
-  const lenders = await listNft(10);
-  await rentNft(10);
+  const lenders = await listNft(8);
+  await rentNft(8);
   await reclaimNft(lenders);
 };
 
@@ -194,7 +194,7 @@ const advTest3 = async () => {
 const advTest4 = async () => {
   await setUp();
   await chkErr('not rent if reserve to high', async () => {
-    await listNft(1, 100);
+    await listNft(1, 80);
   });
 };
 

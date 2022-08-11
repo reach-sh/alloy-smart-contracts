@@ -13,7 +13,7 @@ const INITIAL_RENT_PRICE = 1_000_000;
 const ONE_MINUTE = 60;
 
 const RESERVE_RATIO = 5; // 1:5 reserve ratio - for every one NFT listed, 5 can be rented
-const MAX_RESERVE = 10;
+const MAX_RESERVE = 8;
 
 const POOL_SIZE = MAX_RESERVE * RESERVE_RATIO;
 const MAX_POOL_INDEX = POOL_SIZE - 1;
@@ -72,7 +72,7 @@ export const pool = Reach.App(() => {
   };
 
   const lenderRange = Tuple(Maybe(UInt), Maybe(UInt));
-  const Lenders = new Map(Tuple(lenderRange, Maybe(UInt)));
+  const Lenders = new Map(Tuple(lenderRange, Maybe(UInt))); // a range of pool slots assigned & current slot to check/reclaim
   const Renters = new Map(Maybe(UInt));
   const Pool = Array.replicate(POOL_SIZE, PoolSlot.fromObject(defPoolSlot));
 
@@ -279,7 +279,10 @@ export const pool = Reach.App(() => {
       .api_(api.reclaim, () => {
         check(availableToks <= MAX_POOL_INDEX, 'slot available');
         const now = getTime(0);
-        const [_, s] = getLenderInfo(this);
+        const [[start, end], s] = getLenderInfo(this);
+        check(isSome(start) && isSome(end), 'valid owned range');
+        const rStart = fromSome(start, 0);
+        const rEnd = fromSome(end, 0);
         check(isSome(s), 'is valid slot');
         const fsS = fromSome(s, 0);
         check(fsS <= MAX_POOL_INDEX, 'array check');
@@ -294,6 +297,12 @@ export const pool = Reach.App(() => {
               slotIndex,
               PoolSlot.fromObject(defPoolSlot)
             );
+            Lenders[this] = [
+              [start, end],
+              fsS === rEnd
+                ? Maybe(UInt).Some(rStart)
+                : Maybe(UInt).Some(fsS + 1),
+            ];
             delete Renters[slotInfo.renter];
             notify(null);
             return [
