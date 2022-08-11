@@ -42,14 +42,14 @@ export const main = Reach.App(() => {
     getInit: Fun([], Tuple(Token, UInt, UInt, UInt, UInt)),
     ready: Fun([], Null),
   });
-  const User = API("User", {
+  const User = API({
     propose: Fun([Action], Null),
     unpropose: Fun([UInt], Null),
     support: Fun([ProposalId, UInt], Null),
     unsupport: Fun([ProposalId], Null),
     getUntrackedFunds: Fun([], Null),
   });
-  const Notify = Events({
+  const Log = Events("Log", {
     propose: [ProposalId, Action],
     unpropose: [ProposalId],
     support: [Address, UInt, ProposalId],
@@ -89,7 +89,7 @@ export const main = Reach.App(() => {
           check(isNone(mCurProp));
           return [ [0, [0, govToken]], (k) => {
             proposalMap[this] = [thisConsensusTime(), 0, action, false];
-            Notify.propose([this, thisConsensusTime()], action);
+            Log.propose([this, thisConsensusTime()], action);
             k(null);
             return {done, config, govTokensInVotes};
           }]
@@ -102,7 +102,7 @@ export const main = Reach.App(() => {
           check(timestamp == time);
           return [ [0, [0, govToken]], (k) => {
             delete proposalMap[this];
-            Notify.unpropose([this, timestamp]);
+            Log.unpropose([this, timestamp]);
             k(null);
             return {done, config, govTokensInVotes};
           }];
@@ -150,12 +150,13 @@ export const main = Reach.App(() => {
 
           return [ [0, [voteAmount, govToken]], (k) => {
             const newPropVotes = curPropVotes + voteAmount;
-            // TODO - Jay's notes say something about 5 decimals of accuracy for this.  I'm not sure what that means, because tokens are atomic units, so we know exactly whether the quorum size is met or not.
+            // TODO - I'm not really sure if the quorum is supposed to be just an integer or if it's supposed to represent a fraction of the tokens not held by the dao or what.  For now it's just the number of tokens needed.
+            // TODO - Jay's notes say something about 5 decimals of accuracy for this.  I'm not sure what that means, because tokens are atomic units, so we know exactly whether the quorum size is met or not.  Maybe this indicates that the quorum should be a fraction.
             const enoughVotes = newPropVotes > config.quorumSize;
             const newProp = [proposalTime, newPropVotes, action, enoughVotes];
             proposalMap[proposer] = newProp;
             voterMap[voter] = [[proposer, proposalTime], voteAmount];
-            Notify.support(voter, voteAmount, [proposer, proposalTime])
+            Log.support(voter, voteAmount, [proposer, proposalTime])
 
             if (enoughVotes) {
               action.match({
@@ -171,7 +172,7 @@ export const main = Reach.App(() => {
                 default: (_) => {return;},
               });
 
-              Notify.executed([proposer, proposalTime]);
+              Log.executed([proposer, proposalTime]);
             }
 
             k(null);
@@ -209,7 +210,7 @@ export const main = Reach.App(() => {
               proposalMap[proposer] = newProp;
             }
             transfer([0, [amount, govToken]]).to(voter);
-            Notify.unsupport(voter, amount, [proposer, proposalTime]);
+            Log.unsupport(voter, amount, [proposer, proposalTime]);
             k(null);
             return {
               done,
