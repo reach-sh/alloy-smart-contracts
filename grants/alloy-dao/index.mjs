@@ -47,8 +47,8 @@ const startMeUp = async (ctc, getInit) => {
 const dao_getInit = () => {
   return [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit];
 }
-const makePropInit = (payer, payee, singleAmount) => {
-  return () => [payer, payee, singleAmount, govToken];
+const makePropInit = (payer, payee, netAmt, govAmt) => {
+  return () => [payer, payee, netAmt, govAmt, govToken];
 }
 
 
@@ -72,9 +72,9 @@ const mcall = async (user, methodName, args) => {
   return await ctc.apis[methodName](...args);
 }
 
-const makePropCtc = async (payee, paymentAmt) => {
+const makePropCtc = async (payee, paymentAmt, govAmt) => {
   const ctcProp = admin.contract(testProposalContract);
-  await startMeUp(ctcProp, makePropInit(await ctcDao.getContractAddress(), payee, paymentAmt));
+  await startMeUp(ctcProp, makePropInit(await ctcDao.getContractAddress(), payee, paymentAmt, govAmt));
   return ctcProp;
 }
 
@@ -141,9 +141,8 @@ await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
 // Test CallContract action
 
 const paymentAmt = stdlib.parseCurrency(40);
-const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt);
+const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, 0);
 
-//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), 0, 0, "These bytes really don't matter."]]]);
 await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, 0, "These bytes really don't matter."]]]);
 
 const pe2 = await ctcDao.events.Log.propose.next();
