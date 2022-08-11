@@ -44,7 +44,7 @@ export const main = Reach.App(() => {
   });
   const User = API({
     propose: Fun([Action], Null),
-    unpropose: Fun([UInt], Null),
+    unpropose: Fun([ProposalId], Null),
     support: Fun([ProposalId, UInt], Null),
     unsupport: Fun([ProposalId], Null),
     fund: Fun([UInt, UInt], Null),
@@ -97,7 +97,8 @@ export const main = Reach.App(() => {
             return {done, config, govTokensInVotes};
           }]
         })
-        .api_(User.unpropose, (timestamp) => {
+        .api_(User.unpropose, ([addr, timestamp]) => {
+          check(addr == this);
           const mCurProp = proposalMap[this];
           check(isSome(mCurProp));
           const curProp = fromSome(mCurProp, [0, 0, Action.Noop(), false]);

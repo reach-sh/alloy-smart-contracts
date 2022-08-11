@@ -25,6 +25,7 @@ export const main = Reach.App(() => {
   const [[_], k1] = call(GO.go).pay((_) => {return [paymentAmt, [govAmt, govToken]]});
   // Require a specific payer so the DAO can't be attacked by someone else doing it during voting.
   //enforce(this == payer);
+  // TODO - I can't seem to get this transfer to work...
   //transfer([paymentAmt / 2, [govAmt / 2, govToken]]).to(payee);
   k1(null);
   commit();

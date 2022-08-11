@@ -133,6 +133,7 @@ await mcall (u2, "unsupport", [p1]);
 await mcall (u3, "unsupport", [p1]);
 await mcall (u4, "unsupport", [p1]);
 
+await mcall(u1, "unpropose", [p1]);
 await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
 
 
@@ -141,9 +142,11 @@ await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
 // Test CallContract action
 
 const paymentAmt = stdlib.parseCurrency(40);
-const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, 0);
+const subGovAmt = 2;
+const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, subGovAmt);
 
-await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, 0, "These bytes really don't matter."]]]);
+
+await mcall(u1, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, subGovAmt, "These bytes really don't matter."]]]);
 
 const pe2 = await ctcDao.events.Log.propose.next();
 const p2 = pe2.what[0];
