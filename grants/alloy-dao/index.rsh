@@ -47,6 +47,7 @@ export const main = Reach.App(() => {
     unpropose: Fun([UInt], Null),
     support: Fun([ProposalId, UInt], Null),
     unsupport: Fun([ProposalId], Null),
+    fund: Fun([UInt, UInt], Null),
     getUntrackedFunds: Fun([], Null),
   });
   const Log = Events("Log", {
@@ -64,6 +65,7 @@ export const main = Reach.App(() => {
   });
   Admin.publish(govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit);
   commit();
+
   Admin.pay([0, [initPoolSize, govToken]]);
   const proposalMap = new Map(Address, Proposal);
   const voterMap = new Map(Address, Tuple(ProposalId, UInt));
@@ -88,8 +90,9 @@ export const main = Reach.App(() => {
           const mCurProp = proposalMap[this];
           check(isNone(mCurProp));
           return [ [0, [0, govToken]], (k) => {
-            proposalMap[this] = [thisConsensusTime(), 0, action, false];
-            Log.propose([this, thisConsensusTime()], action);
+            const now = thisConsensusTime();
+            proposalMap[this] = [now, 0, action, false];
+            Log.propose([this, now], action);
             k(null);
             return {done, config, govTokensInVotes};
           }]
@@ -121,29 +124,29 @@ export const main = Reach.App(() => {
           const mProp = proposalMap[proposer];
           const [curPropTime, curPropVotes, action, alreadyCompleted] =
                 fromSome(mProp, [0, 0, Action.Noop(), false]);
-          check(curPropTime != 0);
-          check(curPropTime == proposalTime);
-          check(!alreadyCompleted);
+          check(curPropTime != 0, "time not zero");
+          check(curPropTime == proposalTime, "timestamp matches current proposal for address");
+          check(!alreadyCompleted, "proposal not already done");
           canAdd(proposalTime, config.deadline);
-          check(proposalTime + config.deadline <= thisConsensusTime());
+          enforce(thisConsensusTime() <= proposalTime + config.deadline, "proposal not past deadline");
           canAdd(govTokensInVotes, voteAmount);
           canAdd(voteAmount, curPropVotes);
           const mVoterCurrentSupport = voterMap[voter];
-          check(mVoterCurrentSupport == Maybe(Tuple(ProposalId, UInt)).None());
+          check(mVoterCurrentSupport == Maybe(Tuple(ProposalId, UInt)).None(), "voter not supporting other already");
           const newGovTokensInVotes = govTokensInVotes + voteAmount;
 
           action.match({
             Payment: (([_, networkAmt, govAmt]) => {
               canAdd(newGovTokensInVotes, govAmt);
               // TODO - I feel like these should be require specifically, not check, but that would require the other API form.
-              check(balance() >= networkAmt);
-              check(balance(govToken) >= newGovTokensInVotes + govAmt);
+              check(balance() >= networkAmt, "NT balance greater than pay amount");
+              check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
             }),
             CallContract: (([_, networkAmt, govAmt, _]) => {
               canAdd(newGovTokensInVotes, govAmt);
               // TODO - I feel like these should be require specifically, not check, but that would require the other API form.
-              check(balance() >= networkAmt);
-              check(balance(govToken) >= govAmt + newGovTokensInVotes);
+              check(balance() >= networkAmt, "NT balance greater than pay amount");
+              check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
             }),
             default: (_) => {return;},
           });
@@ -167,7 +170,10 @@ export const main = Reach.App(() => {
                   const rc = remote(contract, {
                     go: Fun([Bytes(contractArgSize)], Null),
                   });
-                  rc.go.pay([networkAmt, [govAmt, govToken]])(callData);
+                  void govAmt
+                  void networkAmt
+                  //rc.go.pay([networkAmt, [govAmt, govToken]])(callData);
+                  rc.go.pay([0, [0, govToken]])(callData);
                 }),
                 default: (_) => {return;},
               });
@@ -192,15 +198,15 @@ export const main = Reach.App(() => {
         .api_(User.unsupport, ([proposer, proposalTime]) => {
           const voter = this;
           const mVote = voterMap[voter];
-          check(isSome(mVote));
+          check(isSome(mVote), "voter is supporting a proposal");
           const [_, amount] = fromSome(mVote, [[voter, 0], 0]);
           // TODO - I feel like this should be require specifically, not check, but then I need to switch to the other API form.
-          check(amount < govTokensInVotes);
+          check(amount <= govTokensInVotes, "the contract has the voter's tokens");
           const mProp = proposalMap[proposer];
           const newProp = mProp.match({
             None: () => {return [0, 0, Action.Noop(), false];},
             Some: ([time, votes, act, executed]) => {
-              check(votes > amount);
+              check(votes >= amount, "the proposal has the voter's tokens");
               return [time, votes - amount, act, executed];
             },
           });
@@ -217,6 +223,12 @@ export const main = Reach.App(() => {
               config,
               govTokensInVotes: govTokensInVotes - amount,
             };
+          }];
+        })
+        .api_(User.fund, (netAmt, govAmt) => {
+          return [ [netAmt, [govAmt, govToken]], (k) => {
+            k(null);
+            return {done, config, govTokensInVotes,};
           }];
         })
         .timeout(false);

@@ -6,20 +6,21 @@ const stdlib = loadStdlib(process.env);
 const startingBalance = stdlib.parseCurrency(10);
 const adminStartingBalance = stdlib.parseCurrency(1000);
 const admin = await stdlib.newTestAccount(adminStartingBalance);
-const ctcDao = admin.contract(daoContract);
+const ctcDao = await admin.contract(daoContract);
 
 const govTokenSupply = 1000;
 const govTokenDecimals = 0;
 const initPoolSize = 500;
-const quorumSizeInit = 400;
-const deadlineInit = 100;
+const quorumSizeInit = 350;
+const deadlineInit = 1000;
 const govTokenTotal = govTokenSupply * (Math.pow(10, govTokenDecimals));
 const govTokenOptions = {
   decimals: govTokenDecimals,
   supply: govTokenSupply,
 };
 
-const govToken = await stdlib.launchToken(admin, "testGovToken", "TGT", govTokenOptions);
+const govTokenLaunched = await stdlib.launchToken(admin, "testGovToken", "TGT", govTokenOptions);
+const govToken = stdlib.bigNumberToNumber(govTokenLaunched.id);
 
 const debugLogging = true;
 const d = (...args) => {
@@ -33,7 +34,7 @@ const startMeUp = async (ctc, getInit) => {
     await ctc.p.Admin({
       getInit: getInit,
       ready: () => {
-        d("The contract is ready: {ctc}")
+        d(`The contract is ready...`)
         throw 42;
       },
     });
@@ -47,12 +48,14 @@ const dao_getInit = () => {
   return [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit];
 }
 const makePropInit = (payer, payee, singleAmount) => {
-  return () => [payer, payee, singleAmount];
+  return () => [payer, payee, singleAmount, govToken];
 }
+
 
 const makeUser = async (ngov) => {
   const u = await stdlib.newTestAccount(startingBalance);
-  stdlib.transfer(admin, u, ngov, govToken);
+  await u.tokenAccept(govToken);
+  await stdlib.transfer(admin, u, ngov, govToken);
   return u;
 }
 
@@ -64,29 +67,134 @@ const u5 = await makeUser(100);
 
 await startMeUp(ctcDao, dao_getInit);
 
-const mcall = (user, methodName, args) => {
+const mcall = async (user, methodName, args) => {
   const ctc = user.contract(daoContract, ctcDao.getInfo())
-  return ctc.apis[methodName](...args);
+  return await ctc.apis[methodName](...args);
 }
 
-const makePropCtc = async (payee, singleAmount) => {
+const makePropCtc = async (payee, paymentAmt) => {
   const ctcProp = admin.contract(testProposalContract);
-  await startMeUp(ctcProp, makePropInit(await ctcDao.getContractAddress(), payee, singleAmount));
+  await startMeUp(ctcProp, makePropInit(await ctcDao.getContractAddress(), payee, paymentAmt));
   return ctcProp;
 }
 
 // Let's give the dao some network token funds.
-stdlib.transfer(admin, ctcDao.getContractAddress(), stdlib.parseCurrency(500));
-
-
-mcall(u1, "propose", ["Payment", u1.getAddress(), 10, 10]);
-
-const e1 = await ctcDao.events.Log.propose.next();
-d(e1);
-const p1 = e1.what[0];
+await mcall(admin, "fund", [stdlib.parseCurrency(500), 0]);
 
 
 
+const checkGBalance = async (user, expectedBal) => {
+  const actualBal = await user.balanceOf(govToken);
+  if (! stdlib.eq(actualBal, expectedBal)) {
+    throw `expected balance: ${expectedBal}, actual balance: ${actualBal}`
+  }
+}
+const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
+  // This isn't a great check.  Users need to pay transaction fees, and balances can change on Algo with rewards, so I can't just check for an expected number.
+  const bal = await u1.balanceOf();
+  const threshold = stdlib.parseCurrency(threshold_nonparsed);
+  const isPoor = stdlib.lt(bal,  threshold);
+  if (shouldBePoor !== isPoor) {
+    throw `u1 shouldBePoor (${shouldBePoor}) not matched, balance: ${bal}, threshold: ${threshold}`
+  }
+}
 
-console.log("Here at end of test file so far.")
-// TODO - listen for events, make more accounts, make proposals, support them, etc
+
+// Test Payment action
+
+await mcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]]]);
+
+await checkPoor(u1, 15, true);
+await checkGBalance(u1, 100);
+
+const pe1 = await ctcDao.events.Log.propose.next();
+const p1 = pe1.what[0];
+
+await mcall (u1, "support", [p1, 100]);
+await checkPoor(u1, 15, true);
+await checkGBalance(u1, 0);
+await mcall (u1, "unsupport", [p1]);
+await checkPoor(u1, 15, true);
+await checkGBalance(u1, 100);
+await mcall (u1, "support", [p1, 100]);
+await checkPoor(u1, 15, true);
+await checkGBalance(u1, 0);
+await mcall (u2, "support", [p1, 100]);
+await checkPoor(u1, 15, true);
+await mcall (u3, "support", [p1, 100]);
+await checkPoor(u1, 15, true);
+await mcall (u4, "support", [p1, 100]);
+const ee1 = await ctcDao.events.Log.executed.next();
+await checkPoor(u1, 15, false);
+await checkGBalance(u1, 10);
+await mcall (u1, "unsupport", [p1]);
+await checkGBalance(u1, 110);
+await mcall (u2, "unsupport", [p1]);
+await mcall (u3, "unsupport", [p1]);
+await mcall (u4, "unsupport", [p1]);
+
+await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
+
+
+
+
+// Test CallContract action
+
+const paymentAmt = stdlib.parseCurrency(40);
+const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt);
+
+//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), 0, 0, "These bytes really don't matter."]]]);
+await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, 0, "These bytes really don't matter."]]]);
+
+const pe2 = await ctcDao.events.Log.propose.next();
+const p2 = pe2.what[0];
+
+await mcall (u1, "support", [p2, 100]);
+await checkPoor(u1, 25, true);
+await checkGBalance(u1, 0);
+await mcall (u2, "support", [p2, 100]);
+await checkPoor(u1, 25, true);
+await mcall (u3, "support", [p2, 100]);
+await checkPoor(u1, 25, true);
+d("\nHERE just before vote wins ===---===---===---===---===---===---\n")
+await mcall (u4, "support", [p2, 100]);
+const ee2 = await ctcDao.events.Log.executed.next();
+//await checkPoor(u1, 25, false);
+//await checkPoor(u1, 45, true);
+//await checkGBalance(u1, 0);
+//await mcall (u1, "unsupport", [p2]);
+//await checkGBalance(u1, 100);
+//await mcall (u2, "unsupport", [p2]);
+//await mcall (u3, "unsupport", [p2]);
+//await mcall (u4, "unsupport", [p2]);
+
+d("\nHERE after first half ===---===---===---===---===---===---\n")
+
+// Get the second half of funding from the test contract.
+//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
+//
+//const pe3 = await ctcDao.events.Log.propose.next();
+//const p3 = pe3.what[0];
+//
+//await mcall (u1, "support", [p3, 100]);
+//await checkPoor(u1, 45, true);
+//await checkGBalance(u1, 0);
+//await mcall (u2, "support", [p3, 100]);
+//await checkPoor(u1, 45, true);
+//await mcall (u3, "support", [p3, 100]);
+//await checkPoor(u1, 45, true);
+//await mcall (u4, "support", [p3, 100]);
+//const ee3 = await ctcDao.events.Log.executed.next();
+//await checkPoor(u1, 45, false);
+//await checkPoor(u1, 65, true);
+//await checkGBalance(u1, 0);
+//await mcall (u1, "unsupport", [p3]);
+//await checkGBalance(u1, 100);
+//await mcall (u2, "unsupport", [p3]);
+//await mcall (u3, "unsupport", [p3]);
+//await mcall (u4, "unsupport", [p3]);
+
+d("\nHERE ===---===---===---===---===---===---\n")
+
+d("At the end of the test file.")
+
