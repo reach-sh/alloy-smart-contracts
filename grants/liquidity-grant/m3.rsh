@@ -130,7 +130,7 @@ export const pool = Reach.App(() => {
           const d = fromSome(lender, defLenderInfo);
           return d[4];
         };
-        const getLforR = (who) => {
+        const getLforR = who => {
           check(availableToks > 0, 'is available');
           check(isNone(Renters[who]), 'is renter');
           check(lendI > 0, 'has lender');
@@ -176,6 +176,7 @@ export const pool = Reach.App(() => {
         ]);
       })
       .invariant(balance(tok) === reserveSupply)
+      .invariant(balance() === 0)
       .invariant(maxAvailble === reserveSupply * RESERVE_RATIO)
       .while(true)
       .api_(api.list, rP => {
@@ -240,7 +241,7 @@ export const pool = Reach.App(() => {
         return [
           handlePmt(rentPrice, 0),
           notify => {
-            transfer(rentPrice).to(lender)
+            transfer(rentPrice).to(lender);
             const updatedRenters = renters.set(nextSlot, this);
             Lenders[lender] = [
               updatedRenters,
