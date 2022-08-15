@@ -1,7 +1,14 @@
 import {loadStdlib} from '@reach-sh/stdlib';
-import * as daoContract from './build/index.main.mjs';
+import * as daoContract from './build/dao.main.mjs';
 import * as testProposalContract from './build/test-proposal-contract.main.mjs';
 const stdlib = loadStdlib(process.env);
+
+const debugLogging = true;
+const d = (...args) => {
+  if (debugLogging) {
+    console.log(...args);
+  }
+}
 
 const startingBalance = stdlib.parseCurrency(10);
 const adminStartingBalance = stdlib.parseCurrency(1000);
@@ -20,14 +27,8 @@ const govTokenOptions = {
 };
 
 const govTokenLaunched = await stdlib.launchToken(admin, "testGovToken", "TGT", govTokenOptions);
-const govToken = stdlib.bigNumberToNumber(govTokenLaunched.id);
+const govToken = govTokenLaunched.id;
 
-const debugLogging = true;
-const d = (...args) => {
-  if (debugLogging) {
-    console.log(...args);
-  }
-}
 
 const startMeUp = async (ctc, getInit) => {
   try {
@@ -91,11 +92,11 @@ const checkGBalance = async (user, expectedBal) => {
 }
 const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
   // This isn't a great check.  Users need to pay transaction fees, and balances can change on Algo with rewards, so I can't just check for an expected number.
-  const bal = await u1.balanceOf();
+  const bal = await user.balanceOf();
   const threshold = stdlib.parseCurrency(threshold_nonparsed);
   const isPoor = stdlib.lt(bal,  threshold);
   if (shouldBePoor !== isPoor) {
-    throw `u1 shouldBePoor (${shouldBePoor}) not matched, balance: ${bal}, threshold: ${threshold}`
+    throw `user shouldBePoor (${shouldBePoor}) not matched, balance: ${bal}, threshold: ${threshold}`
   }
 }
 
@@ -142,7 +143,7 @@ await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
 // Test CallContract action
 
 const paymentAmt = stdlib.parseCurrency(40);
-const subGovAmt = 2;
+const subGovAmt = 0;
 const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, subGovAmt);
 
 
@@ -159,34 +160,38 @@ await checkPoor(u1, 25, true);
 await mcall (u3, "support", [p2, 100]);
 await checkPoor(u1, 25, true);
 d("\nHERE just before vote wins ===---===---===---===---===---===---\n")
+d("subCtc1.getInfo", await subCtc1.getInfo())
+d("u1:", await u1.getAddress())
 await mcall (u4, "support", [p2, 100]);
 const ee2 = await ctcDao.events.Log.executed.next();
 //await checkPoor(u1, 25, false);
 //await checkPoor(u1, 45, true);
 //await checkGBalance(u1, 0);
-//await mcall (u1, "unsupport", [p2]);
+await mcall (u1, "unsupport", [p2]);
 //await checkGBalance(u1, 100);
-//await mcall (u2, "unsupport", [p2]);
-//await mcall (u3, "unsupport", [p2]);
-//await mcall (u4, "unsupport", [p2]);
+await mcall (u2, "unsupport", [p2]);
+await mcall (u3, "unsupport", [p2]);
+await mcall (u4, "unsupport", [p2]);
 
 d("\nHERE after first half ===---===---===---===---===---===---\n")
 
 // Get the second half of funding from the test contract.
+await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
 //await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
-//
-//const pe3 = await ctcDao.events.Log.propose.next();
-//const p3 = pe3.what[0];
-//
-//await mcall (u1, "support", [p3, 100]);
+
+const pe3 = await ctcDao.events.Log.propose.next();
+const p3 = pe3.what[0];
+
+await mcall (u1, "support", [p3, 100]);
 //await checkPoor(u1, 45, true);
 //await checkGBalance(u1, 0);
-//await mcall (u2, "support", [p3, 100]);
+await mcall (u2, "support", [p3, 100]);
 //await checkPoor(u1, 45, true);
-//await mcall (u3, "support", [p3, 100]);
+await mcall (u3, "support", [p3, 100]);
 //await checkPoor(u1, 45, true);
-//await mcall (u4, "support", [p3, 100]);
-//const ee3 = await ctcDao.events.Log.executed.next();
+d("\nHERE just before supporting 2nd CallContract proposal ===---===---===---===---===---===---\n")
+await mcall (u4, "support", [p3, 100]);
+const ee3 = await ctcDao.events.Log.executed.next();
 //await checkPoor(u1, 45, false);
 //await checkPoor(u1, 65, true);
 //await checkGBalance(u1, 0);

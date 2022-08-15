@@ -24,15 +24,16 @@ export const main = Reach.App(() => {
 
   const [[_], k1] = call(GO.go).pay((_) => {return [paymentAmt, [govAmt, govToken]]});
   // Require a specific payer so the DAO can't be attacked by someone else doing it during voting.
-  //enforce(this == payer);
-  // TODO - I can't seem to get this transfer to work...
-  //transfer([paymentAmt / 2, [govAmt / 2, govToken]]).to(payee);
+  enforce(this == payer);
+  // TODO - I can't seem to get this transfer to work when called by a contract...
+  transfer([paymentAmt / 2, [govAmt / 2, govToken]]).to(payee);
   k1(null);
   commit();
 
   const [[bs], k2] = call(GO.go).pay((_) => {return [0, [0, govToken]]});
   enforce(this == payer);
   void getUntrackedFunds();
+  void bs
   if (bs == Bytes(contractArgSize).pad("pay")) {
     transfer([balance(), [balance(govToken), govToken]]).to(payee);
   } else {
