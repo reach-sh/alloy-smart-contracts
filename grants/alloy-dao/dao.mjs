@@ -162,6 +162,7 @@ await checkPoor(u1, 25, true);
 d("\nHERE just before vote wins ===---===---===---===---===---===---\n")
 d("subCtc1.getInfo", await subCtc1.getInfo())
 d("u1:", await u1.getAddress())
+// TODO -- Unless I comment out the transfer, this errors with wrong address.  Particularly interesting here is that if I decode the Address that it says is wrong, it matches the address for u1 but with every other byte swapped.  I have no idea how that swapping could be occurring.
 await mcall (u4, "support", [p2, 100]);
 const ee2 = await ctcDao.events.Log.executed.next();
 //await checkPoor(u1, 25, false);
@@ -176,8 +177,8 @@ await mcall (u4, "unsupport", [p2]);
 d("\nHERE after first half ===---===---===---===---===---===---\n")
 
 // Get the second half of funding from the test contract.
-await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
-//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
+//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
+await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
 
 const pe3 = await ctcDao.events.Log.propose.next();
 const p3 = pe3.what[0];
@@ -190,6 +191,9 @@ await mcall (u2, "support", [p3, 100]);
 await mcall (u3, "support", [p3, 100]);
 //await checkPoor(u1, 45, true);
 d("\nHERE just before supporting 2nd CallContract proposal ===---===---===---===---===---===---\n")
+// TODO - I get the same “invalid Account reference” error here if I call with pay (if I've commented out the earlier transfer).
+// TODO - if I comment out the transfer of the first API call and give a no-pay argument for the second, I get an error: logic eval error: fee too small
+// TODO - if I comment out all transfers in the called contract, I still get an error on the second call with an assert about GroupSize.  I'm not sure what that is.
 await mcall (u4, "support", [p3, 100]);
 const ee3 = await ctcDao.events.Log.executed.next();
 //await checkPoor(u1, 45, false);
