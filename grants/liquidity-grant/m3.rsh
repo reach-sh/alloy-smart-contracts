@@ -84,11 +84,11 @@ export const pool = Reach.App(() => {
 
   const Lenders = new Map(LenderInfo);
   const Renters = new Map(RenterInfo);
-  const lenderArr = Array.replicate(MAX_RESERVE, thisAddress);
-  const MAX_ARR_INDEX = lenderArr.length - 1;
+  const queue = Array.replicate(MAX_RESERVE, thisAddress);
+  const MAX_QUEUE_INDEX = queue.length - 1;
 
-  const [rentedToks, reserveSupply, totPaid, lendI, rentI, lendArr] =
-    parallelReduce([0, 0, 0, 0, 0, lenderArr])
+  const [rentedToks, reserveSupply, totPaid, lendI, rentI, lenderQueue] =
+    parallelReduce([0, 0, 0, 0, 0, queue])
       .define(() => {
         const maxAvailble = reserveSupply * RESERVE_RATIO;
         const availableToks = maxAvailble - rentedToks;
@@ -134,8 +134,8 @@ export const pool = Reach.App(() => {
           check(availableToks > 0, 'is available');
           check(isNone(Renters[who]), 'is renter');
           check(lendI > 0, 'has lender');
-          check(rentI < lendArr.length, 'array checker');
-          const lender = lendArr[rentI];
+          check(rentI < lenderQueue.length, 'array checker');
+          const lender = lenderQueue[rentI];
           check(lender !== thisAddress, 'valid lender');
           return lender;
         };
@@ -150,12 +150,12 @@ export const pool = Reach.App(() => {
           return [renter, [r, os, sc, ap, rp]];
         };
         const mkNullEndArr = i => {
-          check(i <= MAX_ARR_INDEX);
+          check(i <= MAX_QUEUE_INDEX);
           const k = availableToks == 0 ? 0 : availableToks - 1;
-          check(k <= MAX_ARR_INDEX);
+          check(k <= MAX_QUEUE_INDEX);
           const ip = i % availableToks;
-          check(ip <= MAX_ARR_INDEX);
-          const newArr = Array.set(lendArr, ip, lendArr[k]);
+          check(ip <= MAX_QUEUE_INDEX);
+          const newArr = Array.set(lenderQueue, ip, lenderQueue[k]);
           const nullEndArr = Array.set(newArr, k, thisAddress);
           return nullEndArr;
         };
@@ -181,14 +181,14 @@ export const pool = Reach.App(() => {
       .while(true)
       .api_(api.list, rP => {
         check(isNone(Lenders[this]), 'is lender');
-        check(lendI < lendArr.length, 'array bounds check');
+        check(lendI < lenderQueue.length, 'array bounds check');
         return [
           handlePmt(0, 1),
           notify => {
             const x = defLenderInfo.set(3, lendI);
             const lInfo = x.set(4, rP);
             Lenders[this] = lInfo;
-            const updatedLArr = lendArr.set(lendI, this);
+            const updatedLArr = lenderQueue.set(lendI, this);
             notify(null);
             return [
               rentedToks,
@@ -261,7 +261,7 @@ export const pool = Reach.App(() => {
               totPaid + rentPrice,
               lendI,
               isLenderSpent ? rentI + 1 : rentI,
-              lendArr,
+              lenderQueue,
             ];
           },
         ];
@@ -283,7 +283,7 @@ export const pool = Reach.App(() => {
               totPaid,
               lendI,
               rentI,
-              lendArr,
+              lenderQueue,
             ];
           },
         ];
