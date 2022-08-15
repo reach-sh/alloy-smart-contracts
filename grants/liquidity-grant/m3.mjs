@@ -38,22 +38,16 @@ const getSlotInfo = async (a, lender) => {
   const acc = await stdlib.newTestAccount(bal);
   const { v } = acc.contract(backend, ctcInfo);
   const addy = a.networkAccount.addr;
-  const fmtInfo = i => {
-    if (i)
-      return {
-        ...i,
-        owner: fmtAddr(i.owner),
-        renter: fmtAddr(i.renter),
-        endRentTime: fmtNum(i.endRentTime),
-      };
-    return null;
-  };
   if (lender) {
-    const [_p, [isLender, info]] = await v.getLender(addy);
-    return isLender ? fmtInfo(info) : null;
+    const [_p, d] = await v.checkIsLender(addy);
+    const renters = d[0];
+    const i = fmtNum(d[2]);
+    const renter = renters[i];
+    const [_g, [isRenter, t]] = await v.checkRenterTime(fmtAddr(renter));
+    return !isRenter ? null : fmtNum(t.endRentTime);
   } else {
-    const [_p, [isRenter, info]] = await v.getRenter(addy);
-    return isRenter ? fmtInfo(info) : null;
+    const [_j, [isRenter, t]] = await v.checkRenterTime(addy);
+    return !isRenter ? null : fmtNum(t.endRentTime);
   }
 };
 
@@ -107,16 +101,21 @@ const rentNft = async (amt = 1) => {
   return renters;
 };
 
-const reclaimNft = async (lenders, w = true) => {
-  for (const a of lenders) {
-    const ctc = a.contract(backend, ctcInfo);
-    const slotInfo = await getSlotInfo(a, true);
-    // wait until rent time ends
-    if (w) {
-      await wait(slotInfo.endRentTime);
+const reclaimNft = async (acc, w = true) => {
+  const ctc = acc.contract(backend, ctcInfo);
+  const [_c, ctcAddy] = await ctc.v.ctcAddress();
+  const fmtCtcAddy = fmtAddr(ctcAddy);
+  const [_p, d] = await ctc.v.checkIsLender(acc.networkAccount.addr);
+  const renters = d[0];
+  for (const r of renters) {
+    const addy = fmtAddr(r);
+    if (addy === fmtCtcAddy) return;
+    const [_j, [isRenter, t]] = await ctc.v.checkRenterTime(addy);
+    const endRentTime = !isRenter ? null : fmtNum(t.endRentTime);
+    if (w && endRentTime) {
+      await wait(endRentTime);
     }
-    await ctc.a.reclaim();
-    await logViews(a, true);
+    await ctc.a.endRent();
   }
 };
 
@@ -141,9 +140,11 @@ const chkErr = async (lab, test) => {
 // can NFT's be listed, rented, reclaimed, and delisted
 const generalTest = async () => {
   await setUp();
-  const lenders = await listNft(8);
-  await rentNft(8);
-  await reclaimNft(lenders);
+  const lenders = await listNft(3);
+  await rentNft(10);
+  for (const l of lenders) {
+    await reclaimNft(l);
+  }
   await delistNft(lenders);
 };
 
@@ -157,9 +158,11 @@ const delistTest = async () => {
 // can NFT's be listed and reclaimed
 const reclaimTest = async () => {
   await setUp();
-  const lenders = await listNft(8);
-  await rentNft(8);
-  await reclaimNft(lenders);
+  const lenders = await listNft(1);
+  await rentNft(1);
+  for (const l of lenders) {
+    await reclaimNft(l);
+  }
 };
 
 // can NOT delist a currently rented NFT
@@ -178,7 +181,9 @@ const advTest2 = async () => {
   await chkErr('not reclaim while rented', async () => {
     const lenders = await listNft(1);
     await rentNft(1);
-    await reclaimNft(lenders, false);
+    for (const l of lenders) {
+      await reclaimNft(l, false);
+    }
   });
 };
 
@@ -194,7 +199,8 @@ const advTest3 = async () => {
 const advTest4 = async () => {
   await setUp();
   await chkErr('not rent if reserve to high', async () => {
-    await listNft(1, 80);
+    await listNft(1, 100);
+    await rentNft(1);
   });
 };
 

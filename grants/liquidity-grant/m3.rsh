@@ -9,21 +9,9 @@
 // prices which leads to greater yields to the real owners.
 
 const INITIAL_RENT_PRICE = 1_000_000;
-
 const ONE_MINUTE = 60;
-
 const RESERVE_RATIO = 5; // 1:5 reserve ratio - for every one NFT listed, 5 can be rented
-const MAX_RESERVE = 8;
-
-const POOL_SIZE = MAX_RESERVE * RESERVE_RATIO;
-const MAX_POOL_INDEX = POOL_SIZE - 1;
-
-const PoolSlot = Struct([
-  ['owner', Address],
-  ['renter', Address],
-  ['endRentTime', UInt],
-  ['isOpen', Bool],
-]);
+const MAX_RESERVE = 100;
 
 const Stats = Struct([
   ['available', UInt],
@@ -34,22 +22,40 @@ const Stats = Struct([
   ['reserve', UInt],
 ]);
 
+const NextOpenSlot = UInt;
+const SlotToCheck = UInt;
+const AssignedPos = UInt;
+const ReservePrice = UInt;
+const Rents = Array(Address, RESERVE_RATIO);
+const LenderInfo = Tuple(
+  Rents,
+  NextOpenSlot,
+  SlotToCheck,
+  AssignedPos,
+  ReservePrice
+);
+const EndRentTime = UInt;
+const RenterInfo = Object({
+  endRentTime: EndRentTime,
+  lender: Address,
+});
+
 export const pool = Reach.App(() => {
   const Creator = Participant('Creator', {
     tok: Token,
     ready: Fun([], Null),
   });
   const api = API({
-    list: Fun([UInt], Null),
+    list: Fun([ReservePrice], Null),
     delist: Fun([], Null),
     rent: Fun([], UInt),
-    reclaim: Fun([], Null),
+    endRent: Fun([], UInt),
   });
   const V = View({
     ctcAddress: Address,
     stats: Stats,
-    getLender: Fun([Address], Tuple(Bool, PoolSlot)),
-    getRenter: Fun([Address], Tuple(Bool, PoolSlot)),
+    checkIsLender: Fun([Address], LenderInfo),
+    checkRenterTime: Fun([Address], Tuple(Bool, RenterInfo)),
   });
 
   init();
@@ -64,20 +70,25 @@ export const pool = Reach.App(() => {
   const thisAddress = getAddress();
   V.ctcAddress.set(thisAddress);
 
-  const defPoolSlot = {
-    owner: thisAddress,
-    renter: thisAddress,
+  const defLenderInfo = [
+    Array.replicate(RESERVE_RATIO, thisAddress),
+    0,
+    0,
+    0,
+    0,
+  ];
+  const defRenterInfo = {
     endRentTime: 0,
-    isOpen: false,
+    lender: thisAddress,
   };
 
-  const lenderRange = Tuple(Maybe(UInt), Maybe(UInt));
-  const Lenders = new Map(Tuple(lenderRange, Maybe(UInt))); // a range of pool slots assigned & current slot to check/reclaim
-  const Renters = new Map(Maybe(UInt));
-  const Pool = Array.replicate(POOL_SIZE, PoolSlot.fromObject(defPoolSlot));
+  const Lenders = new Map(LenderInfo);
+  const Renters = new Map(RenterInfo);
+  const lenderArr = Array.replicate(MAX_RESERVE, thisAddress);
+  const MAX_ARR_INDEX = lenderArr.length - 1;
 
-  const [rentedToks, nextAvailIndex, totPaid, reserveSupply, pool] =
-    parallelReduce([0, 0, 0, 0, Pool])
+  const [rentedToks, reserveSupply, totPaid, lendI, rentI, lendArr] =
+    parallelReduce([0, 0, 0, 0, 0, lenderArr])
       .define(() => {
         const maxAvailble = reserveSupply * RESERVE_RATIO;
         const availableToks = maxAvailble - rentedToks;
@@ -89,65 +100,65 @@ export const pool = Reach.App(() => {
         const totalToks = maxAvailble;
         const getTime = addTime => thisConsensusSecs() + addTime;
         const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
-        const mkNullEndArr = (p, i) => {
-          check(i <= MAX_POOL_INDEX);
+        const getLRenters = who => {
+          const lender = Lenders[who];
+          check(isSome(lender), 'is lender');
+          const d = fromSome(lender, defLenderInfo);
+          return d[0];
+        };
+        const getLopenSlot = who => {
+          const lender = Lenders[who];
+          check(isSome(lender), 'is lender');
+          const d = fromSome(lender, defLenderInfo);
+          return d[1];
+        };
+        const getLclaimSlot = who => {
+          const lender = Lenders[who];
+          check(isSome(lender), 'is lender');
+          const d = fromSome(lender, defLenderInfo);
+          return d[2];
+        };
+        const getLArrPos = who => {
+          const lender = Lenders[who];
+          check(isSome(lender), 'is lender');
+          const d = fromSome(lender, defLenderInfo);
+          return d[3];
+        };
+        const geLReservePrice = who => {
+          const lender = Lenders[who];
+          check(isSome(lender), 'is lender');
+          const d = fromSome(lender, defLenderInfo);
+          return d[4];
+        };
+        const getLforR = (who) => {
+          check(availableToks > 0, 'is available');
+          check(isNone(Renters[who]), 'is renter');
+          check(lendI > 0, 'has lender');
+          check(rentI < lendArr.length, 'array checker');
+          const lender = lendArr[rentI];
+          check(lender !== thisAddress, 'valid lender');
+          return lender;
+        };
+        const getRforL = who => {
+          const l = Lenders[who];
+          check(isSome(l), 'is lender');
+          const [r, os, sc, ap, rp] = fromSome(l, defLenderInfo);
+          check(os > 0, 'is renting');
+          check(sc <= RESERVE_RATIO - 1, 'array check');
+          const renter = r[sc];
+          check(renter !== thisAddress, 'valid renter');
+          return [renter, [r, os, sc, ap, rp]];
+        };
+        const mkNullEndArr = i => {
+          check(i <= MAX_ARR_INDEX);
           const k = availableToks == 0 ? 0 : availableToks - 1;
-          check(k <= MAX_POOL_INDEX);
+          check(k <= MAX_ARR_INDEX);
           const ip = i % availableToks;
-          check(ip <= MAX_POOL_INDEX);
-          const newArr = Array.set(p, ip, p[k]);
-          const nullEndArr = Array.set(
-            newArr,
-            k,
-            PoolSlot.fromObject(defPoolSlot)
-          );
+          check(ip <= MAX_ARR_INDEX);
+          const newArr = Array.set(lendArr, ip, lendArr[k]);
+          const nullEndArr = Array.set(newArr, k, thisAddress);
           return nullEndArr;
         };
-        const getLenderInfo = addy => {
-          const thisLender = Lenders[addy];
-          const defLenderInfo = [
-            [Maybe(UInt).None(), Maybe(UInt).None()],
-            Maybe(UInt).None(),
-          ];
-          if (isNone(thisLender)) {
-            return defLenderInfo;
-          } else {
-            const d = fromSome(thisLender, defLenderInfo);
-            return d;
-          }
-        };
-        const getRenterSlot = addy => {
-          const thisRenter = Renters[addy];
-          if (isNone(thisRenter)) {
-            return [Maybe(UInt).None(), PoolSlot.fromObject(defPoolSlot)];
-          } else {
-            const slot = fromSome(thisRenter, Maybe(UInt).None());
-            const slotIndex = fromSome(slot, 0);
-            check(slotIndex <= MAX_POOL_INDEX, 'array bounds check');
-            const slotInfo = pool[slotIndex];
-            return [Maybe(UInt).Some(slotIndex), slotInfo];
-          }
-        };
-        const handleListing = who => {
-          const startI = reserveSupply * RESERVE_RATIO;
-          check(startI + RESERVE_RATIO - 1 <= MAX_POOL_INDEX, 'array check');
-          const slotInfo = PoolSlot.fromObject({
-            ...defPoolSlot,
-            owner: who,
-            isOpen: true,
-          });
-          // this is gross
-          // I bet there is an easier/cleaner way to do this
-          // ideally I would like to loop/update the next 5 indexes in one swoop based on the Reserve ratio/starting index
-          // currently hardcoded amounts as we know the reserve ratio is 5 and thus have to update the 5 relevent indices
-          const p1 = pool.set(startI, slotInfo);
-          const p2 = p1.set(startI + 1, slotInfo);
-          const p3 = p2.set(startI + 2, slotInfo);
-          const p4 = p3.set(startI + 3, slotInfo);
-          const p5 = p4.set(startI + 4, slotInfo);
-          return p5;
-        };
-
         V.stats.set(
           Stats.fromObject({
             available: availableToks,
@@ -158,159 +169,120 @@ export const pool = Reach.App(() => {
             reserve: reserveSupply,
           })
         );
-        V.getLender.set(addy => {
-          const [_, currSlot] = getLenderInfo(addy);
-          const s = fromSome(currSlot, 0);
-          check(s <= MAX_POOL_INDEX, 'array check');
-          return [isSome(currSlot), pool[s]];
-        });
-        V.getRenter.set(addy => {
-          const [i, slotInfo] = getRenterSlot(addy);
-          return [isSome(i), slotInfo];
-        });
+        V.checkIsLender.set(addy => fromSome(Lenders[addy], defLenderInfo));
+        V.checkRenterTime.set(addy => [
+          isSome(Renters[addy]),
+          fromSome(Renters[addy], defRenterInfo),
+        ]);
       })
       .invariant(balance(tok) === reserveSupply)
-      .invariant(balance() === 0)
       .invariant(maxAvailble === reserveSupply * RESERVE_RATIO)
       .while(true)
       .api_(api.list, rP => {
-        check(rentPrice >= rP, 'reserve too high');
         check(isNone(Lenders[this]), 'is lender');
-        check(reserveSupply * RESERVE_RATIO <= MAX_POOL_INDEX, 'not available');
+        check(lendI < lendArr.length, 'array bounds check');
         return [
           handlePmt(0, 1),
           notify => {
-            Lenders[this] = [
-              [
-                Maybe(UInt).Some(reserveSupply),
-                Maybe(UInt).Some(reserveSupply + RESERVE_RATIO - 1),
-              ],
-              Maybe(UInt).Some(reserveSupply),
-            ];
-            const updatedPool = handleListing(this);
+            const x = defLenderInfo.set(3, lendI);
+            const lInfo = x.set(4, rP);
+            Lenders[this] = lInfo;
+            const updatedLArr = lendArr.set(lendI, this);
             notify(null);
             return [
               rentedToks,
-              nextAvailIndex,
-              totPaid,
               reserveSupply + 1,
-              updatedPool,
+              totPaid,
+              lendI + 1,
+              rentI,
+              updatedLArr,
             ];
           },
         ];
       })
       .api_(api.delist, () => {
-        const now = getTime(0);
+        const lender = Lenders[this];
         check(reserveSupply > 0, 'token to reclaim');
-        check(isSome(Lenders[this]), 'is lender');
-        const [[strt, end], s] = getLenderInfo(this);
-        check(isSome(s), 'is valid slot');
-        const sIndex = fromSome(s, 0);
-        check(sIndex <= MAX_POOL_INDEX, 'array check');
-        const slotInfo = pool[sIndex];
-        check(slotInfo.renter === thisAddress, 'has renter');
-        const indexToremove = fromSome(s, 0);
-        check(indexToremove <= MAX_POOL_INDEX, 'array bounds check');
-        check(isSome(strt) && isSome(end), 'valid owned range');
-        const rStart = fromSome(strt, 0);
-        const rEnd = fromSome(end, 0);
-        check(
-          rEnd - (RESERVE_RATIO - 1) === rStart &&
-            rStart + (RESERVE_RATIO - 1) <= MAX_POOL_INDEX,
-          'valid range'
-        );
+        check(isSome(lender), 'is lender');
+        const nextSlot = getLopenSlot(this);
+        const assignedPos = getLArrPos(this);
+        const slotsClaimed = getLclaimSlot(this);
+        check(nextSlot === slotsClaimed, 'reclaimed all toks');
+        const newLendArr = mkNullEndArr(assignedPos);
         return [
           handlePmt(0, 0),
           notify => {
-            // this is also gross
-            // ideally would like to 'loop' or some equivelent based on the reserve ratio to make this dynamic
-            // currently hardcoded as we know the reserve ratio is 5 and thus have to update the 5 relevent indices
-            // this currently checks that none of the 'notes' issued buy you are being rented before delisting
-            enforce(now >= pool[rStart].endRentTime);
-            enforce(now >= pool[rStart + 1].endRentTime);
-            enforce(now >= pool[rStart + 2].endRentTime);
-            enforce(now >= pool[rStart + 3].endRentTime);
-            enforce(now >= pool[rStart + 4].endRentTime);
-            const p1 = mkNullEndArr(pool, rStart);
-            const p2 = mkNullEndArr(p1, rStart + 1);
-            const p3 = mkNullEndArr(p2, rStart + 2);
-            const p4 = mkNullEndArr(p3, rStart + 3);
-            const p5 = mkNullEndArr(p4, rStart + 4);
             delete Lenders[this];
             notify(null);
             transfer(1, tok).to(this);
-            return [rentedToks, nextAvailIndex, totPaid, reserveSupply - 1, p5];
+            return [
+              rentedToks,
+              reserveSupply - 1,
+              totPaid,
+              lendI,
+              rentI,
+              newLendArr,
+            ];
           },
         ];
       })
       .api_(api.rent, () => {
-        check(availableToks > 0, 'is available');
-        check(nextAvailIndex <= MAX_POOL_INDEX, 'array bounds check');
-        const { isOpen, owner } = pool[nextAvailIndex];
-        check(isOpen, 'is slot available');
-        check(owner !== thisAddress, 'valid owner');
-        check(isNone(Renters[this]), 'is renter');
+        const lender = getLforR(this);
         const endRentTime = getTime(ONE_MINUTE);
+        const renters = getLRenters(lender);
+        const nextSlot = getLopenSlot(lender);
+        const assignedPos = getLArrPos(lender);
+        const slotsClaimed = getLclaimSlot(lender);
+        const reservePrice = geLReservePrice(lender);
+        check(nextSlot + 1 <= RESERVE_RATIO, 'valid range');
+        check(rentPrice >= reservePrice, 'reserve too high');
+        const isLenderSpent = nextSlot + 1 === RESERVE_RATIO;
         return [
           handlePmt(rentPrice, 0),
           notify => {
-            transfer(rentPrice).to(owner);
-            const updatedPool = pool.set(
-              nextAvailIndex,
-              PoolSlot.fromObject({
-                owner,
-                endRentTime,
-                isOpen: false,
-                renter: this,
-              })
-            );
-            Renters[this] = Maybe(UInt).Some(nextAvailIndex);
+            transfer(rentPrice).to(lender)
+            const updatedRenters = renters.set(nextSlot, this);
+            Lenders[lender] = [
+              updatedRenters,
+              nextSlot + 1,
+              slotsClaimed,
+              assignedPos,
+              reservePrice,
+            ];
+            Renters[this] = {
+              endRentTime,
+              lender,
+            };
             notify(endRentTime);
             return [
               rentedToks + 1,
-              nextAvailIndex + 1,
-              totPaid + rentPrice,
               reserveSupply,
-              updatedPool,
+              totPaid + rentPrice,
+              lendI,
+              isLenderSpent ? rentI + 1 : rentI,
+              lendArr,
             ];
           },
         ];
       })
-      .api_(api.reclaim, () => {
-        check(availableToks <= MAX_POOL_INDEX, 'slot available');
+      .api_(api.endRent, () => {
         const now = getTime(0);
-        const [[start, end], s] = getLenderInfo(this);
-        check(isSome(start) && isSome(end), 'valid owned range');
-        const rStart = fromSome(start, 0);
-        const rEnd = fromSome(end, 0);
-        check(isSome(s), 'is valid slot');
-        const fsS = fromSome(s, 0);
-        check(fsS <= MAX_POOL_INDEX, 'array check');
-        const slotInfo = pool[fsS];
-        check(slotInfo.renter !== thisAddress, 'is being rented');
-        const slotIndex = fromSome(s, 0);
+        const [renter, [r, os, sc, ap, rp]] = getRforL(this);
+        const rInfo = fromSome(Renters[renter], defRenterInfo);
+        check(sc + 1 <= RESERVE_RATIO, 'too many');
         return [
           handlePmt(0, 0),
           notify => {
-            enforce(now >= slotInfo.endRentTime, 'rent time passed');
-            const updatedPool = pool.set(
-              slotIndex,
-              PoolSlot.fromObject(defPoolSlot)
-            );
-            Lenders[this] = [
-              [start, end],
-              fsS === rEnd
-                ? Maybe(UInt).Some(rStart)
-                : Maybe(UInt).Some(fsS + 1),
-            ];
-            delete Renters[slotInfo.renter];
-            notify(null);
+            enforce(now >= rInfo.endRentTime, 'rent time passed');
+            Lenders[this] = [r, os, sc + 1, ap, rp];
+            notify(sc + 1);
             return [
               rentedToks - 1,
-              nextAvailIndex,
-              totPaid,
               reserveSupply,
-              updatedPool,
+              totPaid,
+              lendI,
+              rentI,
+              lendArr,
             ];
           },
         ];

@@ -136,7 +136,6 @@ export const pool = Reach.App(() => {
     .api_(api.list, rP => {
       check(isNone(Lenders[this]), 'is lender');
       check(nextAvailIndex <= MAX_POOL_INDEX, 'slot available');
-      check(RENT_PRICE >= rP, 'rent price below reserve price')
       return [
         handlePmt(0, 1),
         notify => {
@@ -183,6 +182,7 @@ export const pool = Reach.App(() => {
       check(isOpen, 'is slot available');
       check(isNone(Renters[this]), 'is renter');
       const endRentTime = getTime(ONE_MINUTE);
+      check(RENT_PRICE >= reserve, 'price below reserve')
       return [
         handlePmt(RENT_PRICE, 0),
         notify => {

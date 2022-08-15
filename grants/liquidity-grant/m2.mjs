@@ -187,11 +187,12 @@ const advTest3 = async () => {
   });
 };
 
-// can NOT list if reserve to high
+// can NOT list if reserve too high
 const advTest4 = async () => {
   await setUp();
   await chkErr('not rent if reserve to high', async () => {
     await listNft(1, 100);
+    await rent(1);
   });
 };
 
