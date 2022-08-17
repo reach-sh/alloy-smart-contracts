@@ -49,7 +49,7 @@ const dao_getInit = () => {
   return [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit];
 }
 const makePropInit = (payer, payee, netAmt, govAmt) => {
-  return () => [payer, payee, netAmt, govAmt, govToken];
+  return () => [payer, payee, netAmt, govAmt, govToken, 0, 0];
 }
 
 

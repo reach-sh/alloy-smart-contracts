@@ -173,9 +173,13 @@ export const main = Reach.App(() => {
                   });
                   void govAmt
                   void networkAmt
-                  void rc.go.ALGO({strictPay: true})
-                    .withBill([govToken])
-                    .pay([networkAmt, [govAmt, govToken]])(callData);
+                  void (rc.go
+                        .pay([networkAmt, [govAmt, govToken]])
+                        .ALGO({
+                          strictPay: true,
+                        })
+                        .withBill([govToken])
+                        (callData));
                 }),
                 default: (_) => {return;},
               });

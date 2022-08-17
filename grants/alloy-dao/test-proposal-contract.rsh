@@ -5,7 +5,7 @@ const contractArgSize = 256;
 
 export const main = Reach.App(() => {
   const Admin = Participant("Admin", {
-    getInit: Fun([], Tuple(Address, Address, UInt, UInt, Token)),
+    getInit: Fun([], Tuple(Address, Address, UInt, UInt, Token, UInt, UInt)),
     ready: Fun([], Null),
   });
   const GO = API({
@@ -15,10 +15,10 @@ export const main = Reach.App(() => {
   init();
 
   Admin.only(() => {
-    const [payer, payee, paymentAmt, govAmt, govToken] = declassify(interact.getInit());
+    const [payer, payee, paymentAmt, govAmt, govToken, payAmtZero, govAmtZero] = declassify(interact.getInit());
     check(paymentAmt < UInt.max / 2);
   });
-  Admin.publish(payer, payee, paymentAmt, govAmt, govToken);
+  Admin.publish(payer, payee, paymentAmt, govAmt, govToken, payAmtZero, govAmtZero);
   commit();
   Admin.interact.ready();
 
@@ -30,7 +30,8 @@ export const main = Reach.App(() => {
   k1(null);
   commit();
 
-  const [[bs], k2] = call(GO.go).pay((_) => {return [0, [0, govToken]]});
+  // There payAmtZero/govAmtZero should just be literal zeroes... except that those pay amounts are then optimized away, changing the expected transaction group size on Algorand.
+  const [[bs], k2] = call(GO.go).pay((_) => {return [payAmtZero, [govAmtZero, govToken]]});
   enforce(this == payer);
   void getUntrackedFunds();
   void bs
