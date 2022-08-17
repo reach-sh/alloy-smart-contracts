@@ -57,6 +57,9 @@ const makeUser = async (ngov) => {
   const u = await stdlib.newTestAccount(startingBalance);
   await u.tokenAccept(govToken);
   await stdlib.transfer(admin, u, ngov, govToken);
+  if (stdlib.connector !== "ALGO") {
+    u.setGasLimit(5000000);
+  }
   return u;
 }
 
@@ -177,8 +180,8 @@ await mcall (u4, "unsupport", [p2]);
 d("\nHERE after first half ===---===---===---===---===---===---\n")
 
 // Get the second half of funding from the test contract.
-//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
-await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
+await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
+//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
 
 const pe3 = await ctcDao.events.Log.propose.next();
 const p3 = pe3.what[0];

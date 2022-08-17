@@ -17,8 +17,16 @@ const govTokenOptions = {
   supply: govTokenSupply,
 };
 
+const tokenNorm = (t) => {
+  if (stdlib.connector === "ALGO") {
+    return stdlib.bigNumberToNumber(t);
+  } else {
+    return t;
+  }
+}
+
 const govTokenLaunched = await stdlib.launchToken(admin, "testGovToken", "TGT", govTokenOptions);
-const govToken = stdlib.bigNumberToNumber(govTokenLaunched.id);
+const govToken = tokenNorm(govTokenLaunched.id);
 
 const debugLogging = true;
 const d = (...args) => {
@@ -82,7 +90,14 @@ const makePropCtc = async (payer, payee, paymentAmt, govAmt) => {
 }
 
 const bal = async (msg, user) => {
-  d(msg, stdlib.bigNumberToNumber(await user.balanceOf()))
+  const convert = (x) => {
+    if (stdlib.connector === "ALGO") {
+      return stdlib.bigNumberToNumber(x);
+    } else {
+      return x;
+    }
+  }
+  d(msg, convert(await user.balanceOf()))
 }
 
 {
