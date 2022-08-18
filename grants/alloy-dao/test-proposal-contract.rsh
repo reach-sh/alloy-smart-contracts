@@ -10,6 +10,7 @@ export const main = Reach.App(() => {
   });
   const GO = API({
     go: Fun([Bytes(contractArgSize)], Null),
+    poke: Fun([], Null),
   });
 
   init();
@@ -25,29 +26,31 @@ export const main = Reach.App(() => {
   const [[_], k1] = call(GO.go).pay((_) => {return [paymentAmt, [govAmt, govToken]]});
   // Require a specific payer so the DAO can't be attacked by someone else doing it during voting.
   enforce(this == payer);
-  // TODO - I can't seem to get this transfer to work when called by a contract...
-  transfer([paymentAmt / 2, [govAmt / 2, govToken]]).to(payee);
   k1(null);
   commit();
 
-  // There payAmtZero/govAmtZero should just be literal zeroes... except that those pay amounts are then optimized away, changing the expected transaction group size on Algorand.
+  // Separate poke call to not need the host contract to specify extra recipients in remote calls.
+  const [[], k1_] = call(GO.poke);
+  transfer([paymentAmt / 2, [govAmt / 2, govToken]]).to(payee);
+  k1_(null);
+  commit()
+
+  // These payAmtZero/govAmtZero should just be literal zeroes... except that those pay amounts are then optimized away, changing the expected transaction group size on Algorand.
   const [[bs], k2] = call(GO.go).pay((_) => {return [payAmtZero, [govAmtZero, govToken]]});
   enforce(this == payer);
-  void getUntrackedFunds();
-  void bs
-  if (bs == Bytes(contractArgSize).pad("pay")) {
-    transfer([balance(), [balance(govToken), govToken]]).to(payee);
-  } else {
-    // Else we return the payment
-    transfer([balance(), [balance(govToken), govToken]]).to(payer);
-  }
+  const payRest = (bs == Bytes(contractArgSize).pad("pay"))
   k2(null);
   commit();
 
-  // TODO - remove this...
-  Admin.publish();
-  transfer([balance(), [balance(govToken), govToken]]).to(Admin);
+  const [[], k2_] = call(GO.poke);
+  void getUntrackedFunds();
+  void getUntrackedFunds(govToken);
+  if (payRest) {
+    transfer([balance(), [balance(govToken), govToken]]).to(payee);
+  } else {
+    transfer([balance(), [balance(govToken), govToken]]).to(payer);
+  }
+  k2_(null);
   commit();
-
 
 });

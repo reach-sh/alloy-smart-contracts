@@ -71,9 +71,12 @@ const u5 = await makeUser(100);
 
 await startMeUp(ctcDao, dao_getInit);
 
-const mcall = async (user, methodName, args) => {
-  const ctc = user.contract(daoContract, ctcDao.getInfo())
+const mcall = async (ctcBackend, ctcIn, user, methodName, args) => {
+  const ctc = user.contract(ctcBackend, ctcIn);
   return await ctc.apis[methodName](...args);
+}
+const dcall = async (user, methodName, args) => {
+  return await mcall(daoContract, ctcDao.getInfo(), user, methodName, args);
 }
 
 const makePropCtc = async (payee, paymentAmt, govAmt) => {
@@ -83,7 +86,7 @@ const makePropCtc = async (payee, paymentAmt, govAmt) => {
 }
 
 // Let's give the dao some network token funds.
-await mcall(admin, "fund", [stdlib.parseCurrency(500), 0]);
+await dcall(admin, "fund", [stdlib.parseCurrency(500), 0]);
 
 
 
@@ -106,7 +109,7 @@ const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
 
 // Test Payment action
 
-await mcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]]]);
+await dcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]]]);
 
 await checkPoor(u1, 15, true);
 await checkGBalance(u1, 100);
@@ -114,31 +117,31 @@ await checkGBalance(u1, 100);
 const pe1 = await ctcDao.events.Log.propose.next();
 const p1 = pe1.what[0];
 
-await mcall (u1, "support", [p1, 100]);
+await dcall (u1, "support", [p1, 100]);
 await checkPoor(u1, 15, true);
 await checkGBalance(u1, 0);
-await mcall (u1, "unsupport", [p1]);
+await dcall (u1, "unsupport", [p1]);
 await checkPoor(u1, 15, true);
 await checkGBalance(u1, 100);
-await mcall (u1, "support", [p1, 100]);
+await dcall (u1, "support", [p1, 100]);
 await checkPoor(u1, 15, true);
 await checkGBalance(u1, 0);
-await mcall (u2, "support", [p1, 100]);
+await dcall (u2, "support", [p1, 100]);
 await checkPoor(u1, 15, true);
-await mcall (u3, "support", [p1, 100]);
+await dcall (u3, "support", [p1, 100]);
 await checkPoor(u1, 15, true);
-await mcall (u4, "support", [p1, 100]);
+await dcall (u4, "support", [p1, 100]);
 const ee1 = await ctcDao.events.Log.executed.next();
 await checkPoor(u1, 15, false);
 await checkGBalance(u1, 10);
-await mcall (u1, "unsupport", [p1]);
+await dcall (u1, "unsupport", [p1]);
 await checkGBalance(u1, 110);
-await mcall (u2, "unsupport", [p1]);
-await mcall (u3, "unsupport", [p1]);
-await mcall (u4, "unsupport", [p1]);
+await dcall (u2, "unsupport", [p1]);
+await dcall (u3, "unsupport", [p1]);
+await dcall (u4, "unsupport", [p1]);
 
-await mcall(u1, "unpropose", [p1]);
-await mcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
+await dcall(u1, "unpropose", [p1]);
+await dcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
 
 
 
@@ -150,65 +153,54 @@ const subGovAmt = 0;
 const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, subGovAmt);
 
 
-await mcall(u1, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, subGovAmt, "These bytes really don't matter."]]]);
+await dcall(u1, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, subGovAmt, "These bytes really don't matter."]]]);
 
 const pe2 = await ctcDao.events.Log.propose.next();
 const p2 = pe2.what[0];
 
-await mcall (u1, "support", [p2, 100]);
+await dcall (u1, "support", [p2, 100]);
 await checkPoor(u1, 25, true);
 await checkGBalance(u1, 0);
-await mcall (u2, "support", [p2, 100]);
+await dcall (u2, "support", [p2, 100]);
 await checkPoor(u1, 25, true);
-await mcall (u3, "support", [p2, 100]);
+await dcall (u3, "support", [p2, 100]);
 await checkPoor(u1, 25, true);
-d("\nHERE just before vote wins ===---===---===---===---===---===---\n")
-d("subCtc1.getInfo", await subCtc1.getInfo())
-d("u1:", await u1.getAddress())
-// TODO -- Unless I comment out the transfer, this errors with wrong address.  Particularly interesting here is that if I decode the Address that it says is wrong, it matches the address for u1 but with every other byte swapped.  I have no idea how that swapping could be occurring.
-await mcall (u4, "support", [p2, 100]);
+await dcall (u4, "support", [p2, 100]);
 const ee2 = await ctcDao.events.Log.executed.next();
-//await checkPoor(u1, 25, false);
-//await checkPoor(u1, 45, true);
-//await checkGBalance(u1, 0);
-await mcall (u1, "unsupport", [p2]);
-//await checkGBalance(u1, 100);
-await mcall (u2, "unsupport", [p2]);
-await mcall (u3, "unsupport", [p2]);
-await mcall (u4, "unsupport", [p2]);
+await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
+await checkPoor(u1, 25, false);
+await checkPoor(u1, 45, true);
+await checkGBalance(u1, 0);
+await dcall (u1, "unsupport", [p2]);
+await checkGBalance(u1, 100);
+await dcall (u2, "unsupport", [p2]);
+await dcall (u3, "unsupport", [p2]);
+await dcall (u4, "unsupport", [p2]);
 
-d("\nHERE after first half ===---===---===---===---===---===---\n")
 
 // Get the second half of funding from the test contract.
-await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "NO PAY"]]]);
-//await mcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
-
+await dcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
 const pe3 = await ctcDao.events.Log.propose.next();
 const p3 = pe3.what[0];
 
-await mcall (u1, "support", [p3, 100]);
-//await checkPoor(u1, 45, true);
-//await checkGBalance(u1, 0);
-await mcall (u2, "support", [p3, 100]);
-//await checkPoor(u1, 45, true);
-await mcall (u3, "support", [p3, 100]);
-//await checkPoor(u1, 45, true);
-d("\nHERE just before supporting 2nd CallContract proposal ===---===---===---===---===---===---\n")
-// TODO - I get the same “invalid Account reference” error here if I call with pay (if I've commented out the earlier transfer).
-// TODO - if I comment out the transfer of the first API call and give a no-pay argument for the second, I get an error: logic eval error: fee too small
-// TODO - if I comment out all transfers in the called contract, I still get an error on the second call with an assert about GroupSize.  I'm not sure what that is.
-await mcall (u4, "support", [p3, 100]);
+await dcall (u1, "support", [p3, 100]);
+await checkPoor(u1, 45, true);
+await checkGBalance(u1, 0);
+await dcall (u2, "support", [p3, 100]);
+await checkPoor(u1, 45, true);
+await dcall (u3, "support", [p3, 100]);
+await checkPoor(u1, 45, true);
+await dcall (u4, "support", [p3, 100]);
 const ee3 = await ctcDao.events.Log.executed.next();
-//await checkPoor(u1, 45, false);
-//await checkPoor(u1, 65, true);
-//await checkGBalance(u1, 0);
-//await mcall (u1, "unsupport", [p3]);
-//await checkGBalance(u1, 100);
-//await mcall (u2, "unsupport", [p3]);
-//await mcall (u3, "unsupport", [p3]);
-//await mcall (u4, "unsupport", [p3]);
-
-d("\nHERE ===---===---===---===---===---===---\n")
+await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
+await checkPoor(u1, 45, false);
+await checkPoor(u1, 65, true);
+await checkGBalance(u1, 0);
+await dcall (u1, "unsupport", [p3]);
+await checkGBalance(u1, 100);
+await dcall (u2, "unsupport", [p3]);
+await dcall (u3, "unsupport", [p3]);
+await dcall (u4, "unsupport", [p3]);
 
 d("At the end of the test file.")
 

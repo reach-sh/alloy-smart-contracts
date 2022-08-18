@@ -105,10 +105,12 @@ const bal = async (msg, user) => {
   await bal("u1 pre", u1)
   await checkPoor(u1, 15, true);
   await mcall(testProposalContract, ctc.getInfo(), admin, "go", ["These bytes don't matter."])
+  await mcall(testProposalContract, ctc.getInfo(), admin, "poke", [])
   await bal("u1 after 1st api", u1)
   await checkPoor(u1, 15, false);
   await checkPoor(u1, 25, true);
   await mcall(testProposalContract, ctc.getInfo(), admin, "go", ["pay"])
+  await mcall(testProposalContract, ctc.getInfo(), admin, "poke", [])
   await bal("u1 after 2nd api", u1)
   await checkPoor(u1, 25, false);
   await checkPoor(u1, 35, true);
@@ -121,11 +123,13 @@ const bal = async (msg, user) => {
   await bal("u2 pre", u2)
   await checkPoor(u2, 15, true);
   await mcall(testProposalContract, ctc.getInfo(), u1, "go", ["These bytes don't matter."])
+  await mcall(testProposalContract, ctc.getInfo(), admin, "poke", [])
   await bal("u1 after 1st api", u1)
   await bal("u2 after 1st api", u2)
   await checkPoor(u2, 15, false);
   await checkPoor(u2, 25, true);
   await mcall(testProposalContract, ctc.getInfo(), u1, "go", ["NO DON'T PAY"])
+  await mcall(testProposalContract, ctc.getInfo(), admin, "poke", [])
   await bal("u1 after 2nd api", u1)
   await bal("u2 after 2nd api", u2)
   await checkPoor(u2, 25, true);
