@@ -109,7 +109,7 @@ const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
 
 // Test Payment action
 
-await dcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]]]);
+await dcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]], "proposal message"]);
 
 await checkPoor(u1, 15, true);
 await checkGBalance(u1, 100);
@@ -150,7 +150,7 @@ const subGovAmt = 0;
 const subCtc1 = await makePropCtc(await u1.getAddress(), paymentAmt, subGovAmt);
 
 
-await dcall(u1, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, subGovAmt, "These bytes really don't matter."]]]);
+await dcall(u1, "propose", [["CallContract", [await subCtc1.getInfo(), paymentAmt, subGovAmt, "These bytes really don't matter."]], "proposal message"]);
 
 const pe2 = await ctcDao.events.Log.propose.next();
 const p2 = pe2.what[0];
@@ -173,7 +173,7 @@ await dcall (u3, "unsupport", [p2]);
 
 
 // Get the second half of funding from the test contract.
-await dcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]]]);
+await dcall(u5, "propose", [["CallContract", [await subCtc1.getInfo(), stdlib.parseCurrency(0), 0, "pay"]], "proposal message"]);
 const pe3 = await ctcDao.events.Log.propose.next();
 const p3 = pe3.what[0];
 

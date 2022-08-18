@@ -2,6 +2,7 @@
 'use strict';
 
 const contractArgSize = 256;
+const proposalTextSize = 64;
 const quorumMax = 100_000;
 
 const Action = Data({
@@ -22,11 +23,12 @@ const Proposal = Tuple(
   UInt, // proposedTime
   UInt, // totalVotes
   Action,
+  Bytes(proposalTextSize), // text field primarily for links
   Bool // completed
 );
 
 // A fake proposal object for when I need to get data out of a maybe but its use is guarded by isSome.
-const dummyProposal = [0, 0, Action.Noop(), false];
+const dummyProposal = [0, 0, Action.Noop(), Bytes(proposalTextSize).pad(""), false];
 const someProp = (mprop) => {
   check(isSome(mprop));
   return fromSome(mprop, dummyProposal);
@@ -57,7 +59,7 @@ export const main = Reach.App(() => {
     ready: Fun([], Null),
   });
   const User = API({
-    propose: Fun([Action], Null),
+    propose: Fun([Action, Bytes(proposalTextSize)], Null),
     unpropose: Fun([ProposalId], Null),
     support: Fun([ProposalId, UInt], Null),
     unsupport: Fun([ProposalId], Null),
@@ -65,7 +67,7 @@ export const main = Reach.App(() => {
     getUntrackedFunds: Fun([], Null),
   });
   const Log = Events("Log", {
-    propose: [ProposalId, Action],
+    propose: [ProposalId, Action, Bytes(proposalTextSize)],
     unpropose: [ProposalId],
     support: [Address, UInt, ProposalId],
     unsupport: [Address, UInt, ProposalId],
@@ -118,15 +120,15 @@ export const main = Reach.App(() => {
         .invariant(config.quorumSize <= quorumMax)
         .while( ! done )
         .paySpec([govToken])
-        .api_(User.propose, (action) => {
+        .api_(User.propose, (action, message) => {
           const mCurProp = proposalMap[this];
           check(isNone(mCurProp));
           // Disallow Noop proposals.  They only exist to simplify writing code with Maybe proposals.
           check(action.match({Noop: ((_) => false), default: ((_) => true)}));
           return [ [0, [0, govToken]], (k) => {
             const now = thisConsensusTime();
-            proposalMap[this] = [now, 0, action, false];
-            Log.propose([this, now], action);
+            proposalMap[this] = [now, 0, action, message, false];
+            Log.propose([this, now], action, message);
             k(null);
             return {done, config, treasury, govTokensInVotes};
           }]
@@ -136,7 +138,7 @@ export const main = Reach.App(() => {
           const mCurProp = proposalMap[this];
           check(isSome(mCurProp));
           const curProp = someProp(mCurProp);
-          const [time, _, _, _] = curProp;
+          const [time, _, _, _, _] = curProp;
           check(timestamp == time);
           return [ [0, [0, govToken]], (k) => {
             delete proposalMap[this];
@@ -162,7 +164,8 @@ export const main = Reach.App(() => {
           // Check that the proposal exists and that the voter doesn't currently support anything.
           const voter = this;
           const mProp = proposalMap[proposer];
-          const [curPropTime, curPropVotes, action, alreadyCompleted] = someProp(mProp);
+          const [curPropTime, curPropVotes, action, message, alreadyCompleted] =
+                someProp(mProp);
           check(govTokenTotal >= voteAmount);
           check(govTokenTotal - voteAmount >= treasury.gov + govTokensInVotes);
           check(curPropTime != 0, "time not zero");
@@ -203,7 +206,7 @@ export const main = Reach.App(() => {
           });
 
           return [ [0, [voteAmount, govToken]], (k) => {
-            const newProp = [proposalTime, newPropVotes, action, pass];
+            const newProp = [proposalTime, newPropVotes, action, message, pass];
             proposalMap[proposer] = newProp;
             voterMap[voter] = [[proposer, proposalTime], voteAmount];
             Log.support(voter, voteAmount, [proposer, proposalTime])
@@ -263,9 +266,9 @@ export const main = Reach.App(() => {
           const mProp = proposalMap[proposer];
           const newProp = mProp.match({
             None: () => {return dummyProposal;},
-            Some: ([time, votes, act, executed]) => {
+            Some: ([time, votes, act, message, executed]) => {
               check(votes >= amount, "the proposal has the voter's tokens");
-              return [time, votes - amount, act, executed];
+              return [time, votes - amount, act, message, executed];
             },
           });
           return [ [0, [0, govToken]], (k) => {
