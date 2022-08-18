@@ -115,7 +115,6 @@ export const main = Reach.App(() => {
         .invariant(govTokenTotal >= treasury.gov + govTokensInVotes)
         .invariant(balance(govToken) == treasury.gov + govTokensInVotes)
         .invariant(balance() == treasury.net)
-        .invariant(balance() >= 0)
         .invariant(config.quorumSize <= quorumMax)
         .while( ! done )
         .paySpec([govToken])
