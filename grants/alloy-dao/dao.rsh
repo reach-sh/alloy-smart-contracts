@@ -62,8 +62,10 @@ export const main = Reach.App(() => {
   Admin.only(() => {
     const [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit] =
           declassify(interact.getInit());
+    check(govTokenTotal > initPoolSize);
   });
   Admin.publish(govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit);
+  check(govTokenTotal > initPoolSize);
   commit();
 
   Admin.pay([0, [initPoolSize, govToken]]);
@@ -76,13 +78,23 @@ export const main = Reach.App(() => {
     quorumSize: quorumSizeInit,
     deadline: deadlineInit,
   };
-  const {done, config, govTokensInVotes} =
+  const initTreasury = {
+    net: balance(),
+    gov: balance(govToken),
+  };
+  const {done, config, treasury, govTokensInVotes} =
         parallelReduce({
           done: false,
           config: initConfig,
+          treasury: initTreasury,
           govTokensInVotes: 0,
         })
-        .invariant(balance(govToken) >= govTokensInVotes)
+        .invariant(govTokenTotal >= treasury.gov)
+        .invariant(govTokenTotal >= govTokensInVotes)
+        .invariant(UInt.max - treasury.gov >= govTokensInVotes)
+        .invariant(govTokenTotal >= treasury.gov + govTokensInVotes)
+        .invariant(balance(govToken) == treasury.gov + govTokensInVotes)
+        .invariant(balance() == treasury.net)
         .invariant(balance() >= 0)
         .while( ! done )
         .paySpec([govToken])
@@ -94,7 +106,7 @@ export const main = Reach.App(() => {
             proposalMap[this] = [now, 0, action, false];
             Log.propose([this, now], action);
             k(null);
-            return {done, config, govTokensInVotes};
+            return {done, config, treasury, govTokensInVotes};
           }]
         })
         .api_(User.unpropose, ([addr, timestamp]) => {
@@ -108,15 +120,20 @@ export const main = Reach.App(() => {
             delete proposalMap[this];
             Log.unpropose([this, timestamp]);
             k(null);
-            return {done, config, govTokensInVotes};
+            return {done, config, treasury, govTokensInVotes};
           }];
         })
         .api_(User.getUntrackedFunds, () => {
           return [ [0, [0, govToken]], (k) => {
             k(null);
-            const _ = getUntrackedFunds();
-            const _ = getUntrackedFunds(govToken);
-            return {done, config, govTokensInVotes};
+            const utNet = getUntrackedFunds();
+            const utGov = getUntrackedFunds(govToken);
+            enforce(govTokenTotal >= utGov);
+            enforce(govTokenTotal - utGov >= treasury.gov + govTokensInVotes);
+            return {
+              done, config, govTokensInVotes,
+              treasury: {net: treasury.net + utNet, gov: treasury.gov + utGov},
+            };
           }];
         })
         .api_(User.support, ([proposer, proposalTime], voteAmount) => {
@@ -125,6 +142,8 @@ export const main = Reach.App(() => {
           const mProp = proposalMap[proposer];
           const [curPropTime, curPropVotes, action, alreadyCompleted] =
                 fromSome(mProp, [0, 0, Action.Noop(), false]);
+          check(govTokenTotal >= voteAmount);
+          check(govTokenTotal - voteAmount >= treasury.gov + govTokensInVotes);
           check(curPropTime != 0, "time not zero");
           check(curPropTime == proposalTime, "timestamp matches current proposal for address");
           check(!alreadyCompleted, "proposal not already done");
@@ -162,30 +181,30 @@ export const main = Reach.App(() => {
             voterMap[voter] = [[proposer, proposalTime], voteAmount];
             Log.support(voter, voteAmount, [proposer, proposalTime])
 
-            if (enoughVotes) {
-              action.match({
-                Payment: (([toAddr, networkAmt, govAmt]) => {
-                  transfer([networkAmt, [govAmt, govToken]]).to(toAddr);
-                }),
-                CallContract: (([contract, networkAmt, govAmt, callData]) => {
-                  const rc = remote(contract, {
-                    go: Fun([Bytes(contractArgSize)], Null),
-                  });
-                  void govAmt
-                  void networkAmt
-                  void (rc.go
-                        .pay([networkAmt, [govAmt, govToken]])
-                        .ALGO({
-                          strictPay: true,
-                        })
-                        .withBill([govToken])
-                        (callData));
-                }),
-                default: (_) => {return;},
-              });
+            const exec = () => {
+              if (enoughVotes) {
+                const retval = action.match({
+                  Payment: (([toAddr, networkAmt, govAmt]) => {
+                    transfer([networkAmt, [govAmt, govToken]]).to(toAddr);
+                    return [networkAmt, govAmt];
+                  }),
+                  CallContract: (([contract, networkAmt, govAmt, callData]) => {
+                    const rc = remote(contract, {
+                      go: Fun([Bytes(contractArgSize)], Null),
+                    });
+                    void rc.go.pay([networkAmt, [govAmt, govToken]])(callData);
+                    return [networkAmt, govAmt];
+                  }),
+                  default: (_) => {return [0,0];},
+                });
 
-              Log.executed([proposer, proposalTime]);
+                Log.executed([proposer, proposalTime]);
+                return retval;
+              } else {
+                return [0,0];
+              }
             }
+            const [netSpend, govSpend] = exec();
 
             k(null);
             const newConfig = enoughVotes
@@ -193,10 +212,17 @@ export const main = Reach.App(() => {
                     ChangeParams: (([quorumSize, deadline]) => ({quorumSize, deadline})),
                     default: (_) => config,
                   })
-                  : config
+                  : config;
+            const newTreasury = enoughVotes ?
+                  {
+                    net: treasury.net - netSpend,
+                    gov: treasury.gov - govSpend,
+                  }
+                  : treasury;
             return {
               done,
               config: newConfig,
+              treasury: newTreasury,
               govTokensInVotes: newGovTokensInVotes,
             };
           }];
@@ -227,14 +253,21 @@ export const main = Reach.App(() => {
             return {
               done,
               config,
+              treasury,
               govTokensInVotes: govTokensInVotes - amount,
             };
           }];
         })
         .api_(User.fund, (netAmt, govAmt) => {
+          check(govTokenTotal >= govAmt);
+          check(govTokenTotal - govAmt >= treasury.gov + govTokensInVotes);
           return [ [netAmt, [govAmt, govToken]], (k) => {
             k(null);
-            return {done, config, govTokensInVotes,};
+            const nt = {
+              net: treasury.net + netAmt,
+              gov: treasury.gov + govAmt,
+            }
+            return {done, config, treasury: nt, govTokensInVotes,};
           }];
         })
         .timeout(false);
