@@ -25,6 +25,13 @@ const Proposal = Tuple(
   Bool // completed
 );
 
+// A fake proposal object for when I need to get data out of a maybe but its use is guarded by isSome.
+const dummyProposal = [0, 0, Action.Noop(), false];
+const someProp = (mprop) => {
+  check(isSome(mprop));
+  return fromSome(mprop, dummyProposal);
+}
+
 const ProposalId = Tuple(
   Address, // proposer's address
   UInt // time of proposal creation
@@ -127,7 +134,7 @@ export const main = Reach.App(() => {
           check(addr == this);
           const mCurProp = proposalMap[this];
           check(isSome(mCurProp));
-          const curProp = fromSome(mCurProp, [0, 0, Action.Noop(), false]);
+          const curProp = someProp(mCurProp);
           const [time, _, _, _] = curProp;
           check(timestamp == time);
           return [ [0, [0, govToken]], (k) => {
@@ -154,8 +161,7 @@ export const main = Reach.App(() => {
           // Check that the proposal exists and that the voter doesn't currently support anything.
           const voter = this;
           const mProp = proposalMap[proposer];
-          const [curPropTime, curPropVotes, action, alreadyCompleted] =
-                fromSome(mProp, [0, 0, Action.Noop(), false]);
+          const [curPropTime, curPropVotes, action, alreadyCompleted] = someProp(mProp);
           check(govTokenTotal >= voteAmount);
           check(govTokenTotal - voteAmount >= treasury.gov + govTokensInVotes);
           check(curPropTime != 0, "time not zero");
@@ -255,7 +261,7 @@ export const main = Reach.App(() => {
           check(amount <= govTokensInVotes, "the contract has the voter's tokens");
           const mProp = proposalMap[proposer];
           const newProp = mProp.match({
-            None: () => {return [0, 0, Action.Noop(), false];},
+            None: () => {return dummyProposal;},
             Some: ([time, votes, act, executed]) => {
               check(votes >= amount, "the proposal has the voter's tokens");
               return [time, votes - amount, act, executed];
