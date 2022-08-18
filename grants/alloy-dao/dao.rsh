@@ -121,6 +121,8 @@ export const main = Reach.App(() => {
         .api_(User.propose, (action) => {
           const mCurProp = proposalMap[this];
           check(isNone(mCurProp));
+          // Disallow Noop proposals.  They only exist to simplify writing code with Maybe proposals.
+          check(action.match({Noop: ((_) => false), default: ((_) => true)}));
           return [ [0, [0, govToken]], (k) => {
             const now = thisConsensusTime();
             proposalMap[this] = [now, 0, action, false];
