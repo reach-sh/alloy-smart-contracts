@@ -1,8 +1,8 @@
 'reach 0.1';
 'use strict';
 
-const contractArgSize = 256;
-const proposalTextSize = 64;
+export const contractArgSize = 128;
+const proposalTextSize = 128;
 const quorumMax = 100_000;
 
 const Action = Data({

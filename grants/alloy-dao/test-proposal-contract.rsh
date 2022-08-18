@@ -1,7 +1,7 @@
 'reach 0.1';
 'use strict';
 
-const contractArgSize = 256;
+import {contractArgSize} from 'dao.rsh';
 
 export const main = Reach.App(() => {
   const Admin = Participant("Admin", {
