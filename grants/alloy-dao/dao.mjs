@@ -18,7 +18,7 @@ const ctcDao = await admin.contract(daoContract);
 const govTokenSupply = 1000;
 const govTokenDecimals = 0;
 const initPoolSize = 500;
-const quorumSizeInit = 350;
+const quorumSizeInit = 50_001;
 const deadlineInit = 1000;
 const govTokenTotal = govTokenSupply * (Math.pow(10, govTokenDecimals));
 const govTokenOptions = {
@@ -129,8 +129,6 @@ await checkGBalance(u1, 0);
 await dcall (u2, "support", [p1, 100]);
 await checkPoor(u1, 15, true);
 await dcall (u3, "support", [p1, 100]);
-await checkPoor(u1, 15, true);
-await dcall (u4, "support", [p1, 100]);
 const ee1 = await ctcDao.events.Log.executed.next();
 await checkPoor(u1, 15, false);
 await checkGBalance(u1, 10);
@@ -138,7 +136,6 @@ await dcall (u1, "unsupport", [p1]);
 await checkGBalance(u1, 110);
 await dcall (u2, "unsupport", [p1]);
 await dcall (u3, "unsupport", [p1]);
-await dcall (u4, "unsupport", [p1]);
 
 await dcall(u1, "unpropose", [p1]);
 await dcall(u1, "fund", [stdlib.parseCurrency(10), 10]);
@@ -164,8 +161,6 @@ await checkGBalance(u1, 0);
 await dcall (u2, "support", [p2, 100]);
 await checkPoor(u1, 25, true);
 await dcall (u3, "support", [p2, 100]);
-await checkPoor(u1, 25, true);
-await dcall (u4, "support", [p2, 100]);
 const ee2 = await ctcDao.events.Log.executed.next();
 await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
 await checkPoor(u1, 25, false);
@@ -175,7 +170,6 @@ await dcall (u1, "unsupport", [p2]);
 await checkGBalance(u1, 100);
 await dcall (u2, "unsupport", [p2]);
 await dcall (u3, "unsupport", [p2]);
-await dcall (u4, "unsupport", [p2]);
 
 
 // Get the second half of funding from the test contract.
@@ -189,8 +183,6 @@ await checkGBalance(u1, 0);
 await dcall (u2, "support", [p3, 100]);
 await checkPoor(u1, 45, true);
 await dcall (u3, "support", [p3, 100]);
-await checkPoor(u1, 45, true);
-await dcall (u4, "support", [p3, 100]);
 const ee3 = await ctcDao.events.Log.executed.next();
 await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
 await checkPoor(u1, 45, false);
@@ -200,7 +192,6 @@ await dcall (u1, "unsupport", [p3]);
 await checkGBalance(u1, 100);
 await dcall (u2, "unsupport", [p3]);
 await dcall (u3, "unsupport", [p3]);
-await dcall (u4, "unsupport", [p3]);
 
 d("At the end of the test file.")
 

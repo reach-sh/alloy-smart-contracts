@@ -2,10 +2,11 @@
 'use strict';
 
 const contractArgSize = 256;
+const quorumMax = 100_000;
 
 const Action = Data({
   ChangeParams:
-  // quorumSize, deadline
+  // quorumSize (in millipercent, or per-hundred-thousand), deadline
   Tuple(UInt, UInt),
   Payment:
   // to, network, govToken
@@ -35,6 +36,12 @@ const canAdd = (a,b) => {
 const canSub = (a,b) => {
   check(a > b);
 };
+const canMul = (a,b) => {
+  check(UInt.max / a >= b);
+};
+const canMul256 = (a,b) => {
+  check(UInt256.max / a >= b);
+};
 
 export const main = Reach.App(() => {
   setOptions({verifyArithmetic: true,});
@@ -59,13 +66,19 @@ export const main = Reach.App(() => {
   });
   init();
 
+
   Admin.only(() => {
     const [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit] =
           declassify(interact.getInit());
     check(govTokenTotal > initPoolSize);
+    canMul256(UInt256(quorumMax), UInt256(govTokenTotal));
+    check(UInt.max / quorumMax >= govTokenTotal);
+    check(quorumSizeInit <= quorumMax);
   });
   Admin.publish(govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit);
   check(govTokenTotal > initPoolSize);
+  canMul256(UInt256(quorumMax), UInt256(govTokenTotal));
+  check(quorumSizeInit <= quorumMax);
   commit();
 
   Admin.pay([0, [initPoolSize, govToken]]);
@@ -96,6 +109,7 @@ export const main = Reach.App(() => {
         .invariant(balance(govToken) == treasury.gov + govTokensInVotes)
         .invariant(balance() == treasury.net)
         .invariant(balance() >= 0)
+        .invariant(config.quorumSize <= quorumMax)
         .while( ! done )
         .paySpec([govToken])
         .api_(User.propose, (action) => {
@@ -154,33 +168,41 @@ export const main = Reach.App(() => {
           const mVoterCurrentSupport = voterMap[voter];
           check(mVoterCurrentSupport == Maybe(Tuple(ProposalId, UInt)).None(), "voter not supporting other already");
           const newGovTokensInVotes = govTokensInVotes + voteAmount;
+          const newPropVotes = curPropVotes + voteAmount;
+          const totalVotes = govTokenTotal - treasury.gov;
+          check(newPropVotes <= totalVotes);
+          // Here we allow support to pass with 0 votes if the DAO somehow holds all the tokens.  But really this is mostly there because if I don't rule out the case where totalVotes is zero, the SMT solver can't verify that this multiplication won't overflow because SMT proves that by using division, and SMT defines division by zero as zero.  So without this special case I get verification failure witnesses that include division by zero.
+          const pass = totalVotes == 0 || UInt256(newPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
 
           action.match({
+            ChangeParams: ([quorumSize, _]) => {
+              check(quorumSize <= quorumMax);
+            },
             Payment: (([_, networkAmt, govAmt]) => {
               canAdd(newGovTokensInVotes, govAmt);
-              check(balance() >= networkAmt, "NT balance greater than pay amount");
-              check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
+              if (pass) {
+                check(treasury.net >= networkAmt, "NT balance greater than pay amount");
+                check(treasury.gov >= govAmt, "GT balance greater than pay amount");
+              }
             }),
             CallContract: (([_, networkAmt, govAmt, _]) => {
               canAdd(newGovTokensInVotes, govAmt);
-              check(balance() >= networkAmt, "NT balance greater than pay amount");
-              check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
+              if (pass) {
+                check(treasury.net >= networkAmt, "NT balance greater than pay amount");
+                check(treasury.gov >= govAmt, "GT balance greater than pay amount");
+              }
             }),
             default: (_) => {return;},
           });
 
           return [ [0, [voteAmount, govToken]], (k) => {
-            const newPropVotes = curPropVotes + voteAmount;
-            // TODO - I'm not really sure if the quorum is supposed to be just an integer or if it's supposed to represent a fraction of the tokens not held by the dao or what.  For now it's just the number of tokens needed.
-            // TODO - Jay's notes say something about 5 decimals of accuracy for this.  I'm not sure what that means, because tokens are atomic units, so we know exactly whether the quorum size is met or not.  Maybe this indicates that the quorum should be a fraction.
-            const enoughVotes = newPropVotes > config.quorumSize;
-            const newProp = [proposalTime, newPropVotes, action, enoughVotes];
+            const newProp = [proposalTime, newPropVotes, action, pass];
             proposalMap[proposer] = newProp;
             voterMap[voter] = [[proposer, proposalTime], voteAmount];
             Log.support(voter, voteAmount, [proposer, proposalTime])
 
             const exec = () => {
-              if (enoughVotes) {
+              if (pass) {
                 const retval = action.match({
                   Payment: (([toAddr, networkAmt, govAmt]) => {
                     transfer([networkAmt, [govAmt, govToken]]).to(toAddr);
@@ -205,13 +227,13 @@ export const main = Reach.App(() => {
             const [netSpend, govSpend] = exec();
 
             k(null);
-            const newConfig = enoughVotes
+            const newConfig = pass
                   ? action.match({
                     ChangeParams: (([quorumSize, deadline]) => ({quorumSize, deadline})),
                     default: (_) => config,
                   })
                   : config;
-            const newTreasury = enoughVotes ?
+            const newTreasury = pass ?
                   {
                     net: treasury.net - netSpend,
                     gov: treasury.gov - govSpend,
