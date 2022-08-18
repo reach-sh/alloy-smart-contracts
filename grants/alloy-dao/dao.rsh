@@ -158,13 +158,11 @@ export const main = Reach.App(() => {
           action.match({
             Payment: (([_, networkAmt, govAmt]) => {
               canAdd(newGovTokensInVotes, govAmt);
-              // TODO - I feel like these should be require specifically, not check, but that would require the other API form.
               check(balance() >= networkAmt, "NT balance greater than pay amount");
               check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
             }),
             CallContract: (([_, networkAmt, govAmt, _]) => {
               canAdd(newGovTokensInVotes, govAmt);
-              // TODO - I feel like these should be require specifically, not check, but that would require the other API form.
               check(balance() >= networkAmt, "NT balance greater than pay amount");
               check(balance(govToken) >= newGovTokensInVotes + govAmt, "GT balance greater than pay amount");
             }),
@@ -232,7 +230,6 @@ export const main = Reach.App(() => {
           const mVote = voterMap[voter];
           check(isSome(mVote), "voter is supporting a proposal");
           const [_, amount] = fromSome(mVote, [[voter, 0], 0]);
-          // TODO - I feel like this should be require specifically, not check, but then I need to switch to the other API form.
           check(amount <= govTokensInVotes, "the contract has the voter's tokens");
           const mProp = proposalMap[proposer];
           const newProp = mProp.match({
