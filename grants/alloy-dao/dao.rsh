@@ -79,15 +79,14 @@ export const main = Reach.App(() => {
   Admin.only(() => {
     const [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit] =
           declassify(interact.getInit());
-    check(govTokenTotal > initPoolSize);
-    canMul256(UInt256(quorumMax), UInt256(govTokenTotal));
-    check(UInt.max / quorumMax >= govTokenTotal);
-    check(quorumSizeInit <= quorumMax);
   });
-  Admin.publish(govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit);
-  check(govTokenTotal > initPoolSize);
-  canMul256(UInt256(quorumMax), UInt256(govTokenTotal));
-  check(quorumSizeInit <= quorumMax);
+  Admin.publish(govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit)
+    .check(() => {
+      check(govTokenTotal > initPoolSize);
+      canMul256(UInt256(quorumMax), UInt256(govTokenTotal));
+      check(UInt.max / quorumMax >= govTokenTotal);
+      check(quorumSizeInit <= quorumMax);
+  });
   commit();
 
   Admin.pay([0, [initPoolSize, govToken]]);
