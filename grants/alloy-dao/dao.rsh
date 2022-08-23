@@ -100,8 +100,8 @@ export const main = Reach.App(() => {
     deadline: deadlineInit,
   };
   const initTreasury = {
-    net: balance(),
-    gov: balance(govToken),
+    net: 0,
+    gov: initPoolSize,
   };
   const {done, config, treasury, govTokensInVotes} =
         parallelReduce({
