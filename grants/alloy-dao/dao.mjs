@@ -253,6 +253,7 @@ const testCallContract = async (paySecond) => {
   await dcall (u3, "support", [p3, govStartBalance]);
   const ee3 = await ctcDao.events.Log.executed.next();
   await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
+  dBalance(u1);
   if (paySecond) {
     await checkPoor(u1, nb + 40, false);
     await checkPoor(u1, nb + 60, true);
