@@ -31,6 +31,62 @@ const govTokenLaunched = await stdlib.launchToken(admin, "testGovToken", "TGT", 
 const govToken = govTokenLaunched.id;
 
 
+const hl = (color) => {
+  if (color == "red") {
+    return "\x1b[31m";
+  } else if (color == "green") {
+    return "\x1b[32m";
+  } else if (color == "cyan") {
+    return "\x1b[36m";
+  } else {
+    return "\x1b[0m";
+  }
+}
+
+const mcall = async (ctcBackend, ctcIn, user, methodName, args) => {
+  d(`Calling method: ${hl("cyan")}${await methodName}${hl("off")}`);
+  d(`   - User: ${await (await user).getAddress()}`);
+  d(`   - contract: ${await ctcIn}`);
+  d(`   - Args: ${JSON.stringify(await args)}`);
+  d(``);
+  const ctc = user.contract(ctcBackend, ctcIn);
+  return await ctc.apis[methodName](...args);
+}
+
+const checkGBalance = async (user, expectedBal) => {
+  const actualBal = await user.balanceOf(govToken);
+  if (! stdlib.eq(actualBal, expectedBal)) {
+    throw `expected balance: ${expectedBal}, actual balance: ${actualBal}`
+  }
+}
+const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
+  // This isn't a great check.  Users need to pay transaction fees, and balances can change on Algo with rewards, so I can't just check for an expected number.
+  const bal = await user.balanceOf();
+  const threshold = stdlib.parseCurrency(threshold_nonparsed);
+  const isPoor = stdlib.lt(bal,  threshold);
+  if (shouldBePoor !== isPoor) {
+    throw `user shouldBePoor (${shouldBePoor}) not matched, balance: ${bal}, threshold: ${threshold}`
+  }
+}
+const dBalance = async (user) => {
+  d(`Balance for ${await user.getAddress()}: gov: ${await user.balanceOf(govToken)}, net: ${stdlib.formatCurrency(await user.balanceOf())}`)
+}
+
+const noExpected = "Expected error, got none";
+const expect = async (goFunc, message) => {
+  try {
+    d("Doing something fishy...")
+    await goFunc()
+    throw noExpected;
+  } catch (e) {
+    // TODO - this would be better if we searched the raised exception for the text of the assertion we expect to fail.
+    if (e === noExpected) {
+      throw noExpected + " for: " + message;
+    }
+    d(`Caught expected exception for test: ${message}.\n`);
+  }
+}
+
 const startMeUp = async (ctc, getInit, ctcName) => {
   try {
     await ctc.p.Admin({
@@ -46,13 +102,13 @@ const startMeUp = async (ctc, getInit, ctcName) => {
     }
   }
 }
+
 const dao_getInit = () => {
   return [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit];
 }
 const makePropInit = (payer, payee, netAmt, govAmt) => {
   return () => [payer, payee, netAmt, govAmt, govToken, 0, 0];
 }
-
 
 const makeUser = async (ngov) => {
   const u = await stdlib.newTestAccount(stdlib.parseCurrency(startingBalance));
@@ -78,15 +134,6 @@ const nb = startingBalance / 2;
 
 await startMeUp(ctcDao, dao_getInit, "Dao contract");
 
-const mcall = async (ctcBackend, ctcIn, user, methodName, args) => {
-  d(`Calling method: ${await methodName}`);
-  d(`   - User: ${await (await user).getAddress()}`);
-  d(`   - contract: ${await ctcIn}`);
-  d(`   - Args: ${JSON.stringify(await args)}`);
-  d(``);
-  const ctc = user.contract(ctcBackend, ctcIn);
-  return await ctc.apis[methodName](...args);
-}
 const dcall = async (user, methodName, args) => {
   return await mcall(daoContract, ctcDao.getInfo(), user, methodName, args);
 }
@@ -97,6 +144,10 @@ const makePropCtc = async (payee, paymentAmt, govAmt) => {
   return ctcProp;
 }
 
+
+//////////////////// Start testing proper ////////////////////
+
+
 // Let's give the dao some network token funds.
 await dcall(admin, "fund", [stdlib.parseCurrency(500), 0]);
 
@@ -105,27 +156,7 @@ await dcall(userWithNoGovTokens, "propose", [["Payment", [await admin.getAddress
 const p_leaveAlone = (await ctcDao.events.Log.propose.next()).what[0];
 
 
-const checkGBalance = async (user, expectedBal) => {
-  const actualBal = await user.balanceOf(govToken);
-  if (! stdlib.eq(actualBal, expectedBal)) {
-    throw `expected balance: ${expectedBal}, actual balance: ${actualBal}`
-  }
-}
-const checkPoor = async (user, threshold_nonparsed, shouldBePoor) => {
-  // This isn't a great check.  Users need to pay transaction fees, and balances can change on Algo with rewards, so I can't just check for an expected number.
-  const bal = await user.balanceOf();
-  const threshold = stdlib.parseCurrency(threshold_nonparsed);
-  const isPoor = stdlib.lt(bal,  threshold);
-  if (shouldBePoor !== isPoor) {
-    throw `user shouldBePoor (${shouldBePoor}) not matched, balance: ${bal}, threshold: ${threshold}`
-  }
-}
-const dBalance = async (user) => {
-  d(`Balance for ${await user.getAddress()}: gov: ${await user.balanceOf(govToken)}, net: ${stdlib.formatCurrency(await user.balanceOf())}`)
-}
 
-
-// Test Payment action
 {
   d("\n\n=== Test Payment Action ===\n\n")
 
@@ -171,7 +202,6 @@ const dBalance = async (user) => {
 
 
 
-// Test CallContract action
 const testCallContract = async (paySecond) => {
   d("\n\n=== Test Call Contract Action ===\n\n")
 
@@ -247,42 +277,29 @@ await testCallContract(false);
 
 
 {
-  d("\n\n=== Test Changing Quorum ===\n\n")
-  // Change quorum size to 0.1%
+  d("\n\n=== Test Changing Quorum ===\n\n");
+  d("Change quorum size to 0.1%");
   await dcall(u1, "propose", [["ChangeParams", [100, deadlineInit]], "Let practically anyone pass proposals!"]);
   const p1 = (await ctcDao.events.Log.propose.next()).what[0];
   await dcall (u1, "support", [p1, govStartBalance]);
   await dcall (u2, "support", [p1, govStartBalance]);
   await dcall (u3, "support", [p1, govStartBalance]);
   const ee1 = await ctcDao.events.Log.executed.next();
+  d("Quorum size change done!");
   await dcall (u1, "unsupport", [p1]);
   await dcall (u1, "unpropose", [p1]);
   await dcall (u2, "unsupport", [p1]);
   await dcall (u3, "unsupport", [p1]);
-  // Change quorum again to 0.01%
+  d("Change quorum size to 0.01%");
   await dcall(u1, "propose", [["ChangeParams", [10, deadlineInit]], "Go nuts!"]);
   const p2 = (await ctcDao.events.Log.propose.next()).what[0];
   await dcall (u1, "support", [p2, govStartBalance]);
   const ee2 = await ctcDao.events.Log.executed.next();
+  d("Quorum size change done!");
   await dcall (u1, "unsupport", [p2]);
   await dcall (u1, "unpropose", [p2]);
 }
 
-
-const noExpected = "Expected error, got none";
-const expect = async (goFunc, message) => {
-  try {
-    d("Doing something fishy...")
-    await goFunc()
-    throw noExpected;
-  } catch (e) {
-    // TODO - this would be better if we searched the raised exception for the text of the assertion we expect to fail.
-    if (e === noExpected) {
-      throw noExpected + " for: " + message;
-    }
-    d(`Caught expected exception for test: ${message}.\n`);
-  }
-}
 
 {
   d("\n\n=== Test That Bad Behaviors Don't Work ===\n\n")
