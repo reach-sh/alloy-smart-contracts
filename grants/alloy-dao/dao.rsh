@@ -146,19 +146,6 @@ export const main = Reach.App(() => {
             return {done, config, treasury, govTokensInVotes};
           }];
         })
-        .api_(User.getUntrackedFunds, () => {
-          return [ [0, [0, govToken]], (k) => {
-            k(null);
-            const utNet = getUntrackedFunds();
-            const utGov = getUntrackedFunds(govToken);
-            enforce(govTokenTotal >= utGov);
-            enforce(govTokenTotal - utGov >= treasury.gov + govTokensInVotes);
-            return {
-              done, config, govTokensInVotes,
-              treasury: {net: treasury.net + utNet, gov: treasury.gov + utGov},
-            };
-          }];
-        })
         .api_(User.support, ([proposer, proposalTime], voteAmount) => {
           // Check that the proposal exists and that the voter doesn't currently support anything.
           const voter = this;
@@ -295,6 +282,20 @@ export const main = Reach.App(() => {
               gov: treasury.gov + govAmt,
             }
             return {done, config, treasury: nt, govTokensInVotes,};
+          }];
+        })
+        .api_(User.getUntrackedFunds, () => {
+          return [ [0, [0, govToken]], (k) => {
+            k(null);
+            const utNet = getUntrackedFunds();
+            const utGov = getUntrackedFunds(govToken);
+            // If the admin launching the contract is not honest about the total number of government tokens in total, this getUntrackedFunds call can fail this enforce call.  But also voting is broken if the admin is dishonest about that.
+            enforce(govTokenTotal >= utGov);
+            enforce(govTokenTotal - utGov >= treasury.gov + govTokensInVotes);
+            return {
+              done, config, govTokensInVotes,
+              treasury: {net: treasury.net + utNet, gov: treasury.gov + utGov},
+            };
           }];
         })
         .timeout(false);
