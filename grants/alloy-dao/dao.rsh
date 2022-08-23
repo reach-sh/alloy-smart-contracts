@@ -19,7 +19,6 @@ const Action = Data({
 });
 
 const Proposal = Tuple(
-  // TODO - real proposals should probably have a text field that can contain eg. an IPFS link to a high-level explanation, argument, etc.
   UInt, // proposedTime
   UInt, // totalVotes
   Action,
@@ -77,6 +76,7 @@ export const main = Reach.App(() => {
 
 
   Admin.only(() => {
+    // Note that it is critical that the admin be honest about the govTokenTotal -- the total number of government tokens that exist.  If the admin gives a number lower that the true number, this contract can be bricked.  With any incorrect number it defeats the logic of checking whether a proposal passes.  This contract also assumes no clawback or freezing of the government token.
     const [govToken, govTokenTotal, initPoolSize, quorumSizeInit, deadlineInit] =
           declassify(interact.getInit());
   });
@@ -289,7 +289,6 @@ export const main = Reach.App(() => {
             k(null);
             const utNet = getUntrackedFunds();
             const utGov = getUntrackedFunds(govToken);
-            // If the admin launching the contract is not honest about the total number of government tokens in total, this getUntrackedFunds call can fail this enforce call.  But also voting is broken if the admin is dishonest about that.
             enforce(govTokenTotal >= utGov);
             enforce(govTokenTotal - utGov >= treasury.gov + govTokensInVotes);
             return {
