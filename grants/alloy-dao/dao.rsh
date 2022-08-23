@@ -180,8 +180,7 @@ export const main = Reach.App(() => {
           const newPropVotes = curPropVotes + voteAmount;
           const totalVotes = govTokenTotal - treasury.gov;
           check(newPropVotes <= totalVotes);
-          // Here we allow support to pass with 0 votes if the DAO somehow holds all the tokens.  But really this is mostly there because if I don't rule out the case where totalVotes is zero, the SMT solver can't verify that this multiplication won't overflow because SMT proves that by using division, and SMT defines division by zero as zero.  So without this special case I get verification failure witnesses that include division by zero.
-          const pass = totalVotes == 0 || UInt256(newPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
+          const pass = UInt256(newPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
 
           action.match({
             ChangeParams: ([quorumSize, _]) => {
