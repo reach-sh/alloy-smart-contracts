@@ -7,7 +7,7 @@
 
 const RENT_PRICE = 1_000_000;
 
-const ONE_MINUTE = 10;
+const ONE_MINUTE = 60;
 
 const Stats = Struct([
   ['owner', Address],

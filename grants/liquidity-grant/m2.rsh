@@ -7,7 +7,7 @@
 // generated given N real NFTs, where each NFT
 // has its own reserve price and are rented in order.
 
-const ONE_MINUTE = 10;
+const ONE_MINUTE = 60;
 const RENT_PRICE = 1_000_000; // 1 ALGO
 
 const POOL_SIZE = 20;

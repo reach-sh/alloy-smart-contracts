@@ -9,7 +9,7 @@
 // prices which leads to greater yields to the real owners.
 
 const INITIAL_RENT_PRICE = 1_000_000;
-const ONE_MINUTE = 10;
+const ONE_MINUTE = 60;
 const RESERVE_RATIO = 5; // 1:5 reserve ratio - for every one NFT listed, 5 can be rented
 const MAX_RESERVE = 100;
 
