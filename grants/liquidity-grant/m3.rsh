@@ -9,7 +9,7 @@
 // prices which leads to greater yields to the real owners.
 
 const INITIAL_RENT_PRICE = 1_000_000;
-const ONE_MINUTE = 60;
+const ONE_MINUTE = 10;
 const RESERVE_RATIO = 5; // 1:5 reserve ratio - for every one NFT listed, 5 can be rented
 const MAX_RESERVE = 100;
 
@@ -54,8 +54,8 @@ export const pool = Reach.App(() => {
   const V = View({
     ctcAddress: Address,
     stats: Stats,
-    checkIsLender: Fun([Address], LenderInfo),
-    checkRenterTime: Fun([Address], Tuple(Bool, RenterInfo)),
+    getLender: Fun([Address], LenderInfo),
+    getRenter: Fun([Address], Tuple(Bool, RenterInfo)),
   });
 
   init();
@@ -96,7 +96,8 @@ export const pool = Reach.App(() => {
         const rentPrice =
           rentedToks === 0
             ? INITIAL_RENT_PRICE
-            : (rentedToks === 1 ? 2 : rentedToks) * INITIAL_RENT_PRICE;
+            : rentedToks *
+              INITIAL_RENT_PRICE;
         const totalToks = maxAvailble;
         const getTime = addTime => thisConsensusSecs() + addTime;
         const handlePmt = (netAmt, TokAmt) => [netAmt, [TokAmt, tok]];
@@ -169,8 +170,8 @@ export const pool = Reach.App(() => {
             reserve: reserveSupply,
           })
         );
-        V.checkIsLender.set(addy => fromSome(Lenders[addy], defLenderInfo));
-        V.checkRenterTime.set(addy => [
+        V.getLender.set(addy => fromSome(Lenders[addy], defLenderInfo));
+        V.getRenter.set(addy => [
           isSome(Renters[addy]),
           fromSome(Renters[addy], defRenterInfo),
         ]);

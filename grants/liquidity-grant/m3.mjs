@@ -39,14 +39,14 @@ const getSlotInfo = async (a, lender) => {
   const { v } = acc.contract(backend, ctcInfo);
   const addy = a.networkAccount.addr;
   if (lender) {
-    const [_p, d] = await v.checkIsLender(addy);
+    const [_p, d] = await v.getLender(addy);
     const renters = d[0];
     const i = fmtNum(d[2]);
     const renter = renters[i];
-    const [_g, [isRenter, t]] = await v.checkRenterTime(fmtAddr(renter));
+    const [_g, [isRenter, t]] = await v.getRenter(fmtAddr(renter));
     return !isRenter ? null : fmtNum(t.endRentTime);
   } else {
-    const [_j, [isRenter, t]] = await v.checkRenterTime(addy);
+    const [_j, [isRenter, t]] = await v.getRenter(addy);
     return !isRenter ? null : fmtNum(t.endRentTime);
   }
 };
@@ -105,17 +105,18 @@ const reclaimNft = async (acc, w = true) => {
   const ctc = acc.contract(backend, ctcInfo);
   const [_c, ctcAddy] = await ctc.v.ctcAddress();
   const fmtCtcAddy = fmtAddr(ctcAddy);
-  const [_p, d] = await ctc.v.checkIsLender(acc.networkAccount.addr);
+  const [_p, d] = await ctc.v.getLender(acc.networkAccount.addr);
   const renters = d[0];
   for (const r of renters) {
     const addy = fmtAddr(r);
     if (addy === fmtCtcAddy) return;
-    const [_j, [isRenter, t]] = await ctc.v.checkRenterTime(addy);
+    const [_j, [isRenter, t]] = await ctc.v.getRenter(addy);
     const endRentTime = !isRenter ? null : fmtNum(t.endRentTime);
     if (w && endRentTime) {
       await wait(endRentTime);
     }
     await ctc.a.endRent();
+    await logViews(acc);
   }
 };
 
@@ -139,6 +140,9 @@ const chkErr = async (lab, test) => {
 
 // can NFT's be listed, rented, reclaimed, and delisted
 const generalTest = async () => {
+  console.log('');
+  console.log('general test started');
+  console.log('');
   await setUp();
   const lenders = await listNft(3);
   await rentNft(10);
@@ -146,37 +150,61 @@ const generalTest = async () => {
     await reclaimNft(l);
   }
   await delistNft(lenders);
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NFT's be listed and delisted
 const delistTest = async () => {
+  console.log('');
+  console.log('delist test started');
+  console.log('');
   await setUp();
-  const lenders = await listNft(8);
+  const lenders = await listNft(5);
   await delistNft(lenders);
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NFT's be listed and reclaimed
 const reclaimTest = async () => {
+  console.log('');
+  console.log('reclaim test started');
+  console.log('');
   await setUp();
   const lenders = await listNft(1);
   await rentNft(1);
   for (const l of lenders) {
     await reclaimNft(l);
   }
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NOT delist a currently rented NFT
 const advTest1 = async () => {
+  console.log('');
+  console.log('NOT delist while rented test started');
+  console.log('');
   await setUp();
   await chkErr('not delist while rented', async () => {
     const lenders = await listNft(1);
     await rentNft(1);
     await delistNft(lenders, false);
   });
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NOT reclaim a rented NFT while rented
 const advTest2 = async () => {
+  console.log('');
+  console.log('NOT reclaim while rented test started');
+  console.log('');
   await setUp();
   await chkErr('not reclaim while rented', async () => {
     const lenders = await listNft(1);
@@ -185,23 +213,38 @@ const advTest2 = async () => {
       await reclaimNft(l, false);
     }
   });
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NOT rent if none are available
 const advTest3 = async () => {
+  console.log('');
+  console.log('NOT rent if none are available');
+  console.log('');
   await setUp();
   await chkErr('not rent if none are available', async () => {
     await rentNft(2);
   });
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 // can NOT list if reserve to high
 const advTest4 = async () => {
+  console.log('');
+  console.log('NOT rent if reserve to high');
+  console.log('');
   await setUp();
   await chkErr('not rent if reserve to high', async () => {
     await listNft(1, 100);
     await rentNft(1);
   });
+  console.log('===================');
+  console.log('Test Complete');
+  console.log('===================');
 };
 
 const runTests = async () => {

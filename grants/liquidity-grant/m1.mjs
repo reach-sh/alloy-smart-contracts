@@ -63,7 +63,11 @@ const chkErr = async (lab, test) => {
 
 // can list, make available, rent, and end rent
 const gneralTest = async () => {
+  console.log('');
+  console.log('General Test Started');
+  console.log('');
   await launchNFT();
+  await logViews();
   const accRenter = await stdlib.newTestAccount(bal);
   const ctcRenter = accRenter.contract(backend, ctcInfo);
   await ctcRenter.a.rent();
@@ -73,10 +77,16 @@ const gneralTest = async () => {
   await wait(endRentTime);
   await ctcMachine.a.endRent();
   await logViews();
+  console.log('===============');
+  console.log('Test Complete');
+  console.log('===============');
 };
 
 // can NOT end rent before rent time is up
 const advTest1 = async () => {
+  console.log('');
+  console.log('Creator Can NOT End Rent Early');
+  console.log('');
   await launchNFT();
   await chkErr('not delist while rented', async () => {
     const accRenter = await stdlib.newTestAccount(bal);
@@ -85,10 +95,16 @@ const advTest1 = async () => {
     await ctcMachine.a.endRent();
   });
   await logViews();
+  console.log('===============');
+  console.log('Test Complete');
+  console.log('===============');
 };
 
-// can NOT end rent before rent time is up
+// can NOT rent while rented
 const advTest2 = async () => {
+  console.log('');
+  console.log('New Renter Can not rent already rented NFT');
+  console.log('');
   await launchNFT();
   await chkErr('not rent while rented', async () => {
     const accRenter = await stdlib.newTestAccount(bal);
@@ -99,30 +115,26 @@ const advTest2 = async () => {
     await ctcRenter2.a.rent();
   });
   await logViews();
+  console.log('===============');
+  console.log('Test Complete');
+  console.log('===============');
 };
 
 // renter can NOT make available
 const advTest3 = async () => {
-  await launchNFT();
+  console.log('');
+  console.log('Only the creator can make available');
+  console.log('');
+  await launchNFT(false);
   await chkErr('renter can not make available', async () => {
     const accRenter = await stdlib.newTestAccount(bal);
     const ctcRenter = accRenter.contract(backend, ctcInfo);
-    await ctcRenter.a.rent();
     await ctcRenter.a.makeAvailable();
   });
   await logViews();
-};
-
-// renter can NOT end rent
-const advTest4 = async () => {
-  await launchNFT();
-  await chkErr('renter can not make available', async () => {
-    const accRenter = await stdlib.newTestAccount(bal);
-    const ctcRenter = accRenter.contract(backend, ctcInfo);
-    await ctcRenter.a.rent();
-    await ctcRenter.a.endRent();
-  });
-  await logViews();
+  console.log('===============');
+  console.log('Test Complete');
+  console.log('===============');
 };
 
 const runTests = async () => {
@@ -130,7 +142,6 @@ const runTests = async () => {
   await advTest1();
   await advTest2();
   await advTest3();
-  await advTest4();
 };
 
 await runTests();

@@ -7,7 +7,7 @@
 // generated given N real NFTs, where each NFT
 // has its own reserve price and are rented in order.
 
-const ONE_MINUTE = 60;
+const ONE_MINUTE = 10;
 const RENT_PRICE = 1_000_000; // 1 ALGO
 
 const POOL_SIZE = 20;
@@ -182,7 +182,7 @@ export const pool = Reach.App(() => {
       check(isOpen, 'is slot available');
       check(isNone(Renters[this]), 'is renter');
       const endRentTime = getTime(ONE_MINUTE);
-      check(RENT_PRICE >= reserve, 'price below reserve')
+      check(RENT_PRICE >= reserve, 'price below reserve');
       return [
         handlePmt(RENT_PRICE, 0),
         notify => {
@@ -221,7 +221,7 @@ export const pool = Reach.App(() => {
           enforce(now >= slotInfo.endRentTime, 'rent time passed');
           const updatedPool = pool.set(
             slotIndex,
-            PoolSlot.fromObject(defPoolSlot)
+            PoolSlot.fromObject({ ...defPoolSlot, isOpen: true })
           );
           delete Renters[slotInfo.renter];
           notify(null);

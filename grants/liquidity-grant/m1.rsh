@@ -2,13 +2,12 @@
 'use strict';
 
 /* GOAL */
-// Demonstrate concept via rentable NFTs with
-// accompanying frontend that can determine if
+// Demonstrate concept via rentable NFTs that can determine if
 // ownership is held for the entire period of use.
 
 const RENT_PRICE = 1_000_000;
 
-const ONE_MINUTE = 60;
+const ONE_MINUTE = 10;
 
 const Stats = Struct([
   ['owner', Address],
@@ -55,13 +54,16 @@ export const renter = Reach.App(() => {
     .invariant(balance() === 0)
     .while(true)
     .api_(api.makeAvailable, () => {
+      const now = getTime();
       check(this === Creator, 'is owner');
+      check(renter === Creator, 'belongs to creator');
       check(!isAvailable, 'is available to rent');
       return [
         0,
         notify => {
+          enforce(now >= rentEndTime, 'is rented');
           notify(null);
-          return [true, renter, rentEndTime];
+          return [true, Creator, 0];
         },
       ];
     })
@@ -88,7 +90,7 @@ export const renter = Reach.App(() => {
         notify => {
           enforce(now >= rentEndTime, 'is rented');
           notify(null);
-          return [isAvailable, Creator, 0];
+          return [false, Creator, 0];
         },
       ];
     });
