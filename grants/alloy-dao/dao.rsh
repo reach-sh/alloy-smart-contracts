@@ -167,6 +167,7 @@ export const main = Reach.App(() => {
           const newPropVotes = curPropVotes + voteAmount;
           const totalVotes = govTokenTotal - treasury.gov;
           check(newPropVotes <= totalVotes);
+          // XXX I think in the real version, we should make acting a separate action, because it changes the resources needed to execute the code and thus may be unpredictable/expensive for the final supporter
           const pass = UInt256(newPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
 
           action.match({
