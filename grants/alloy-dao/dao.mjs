@@ -182,6 +182,9 @@ const p_leaveAlone = (await ctcDao.events.Log.propose.next()).what[0];
   d("About to cast final supporting vote...")
   await dBalance(u1);
   await dcall (u3, "support", [p1, govStartBalance]);
+  d("About to execute...")
+  await dBalance(u1);
+  await dcall (u3, "execute", [p1]);
   const ee1 = await ctcDao.events.Log.executed.next();
   await checkPoor(u1, nb + 10, false);
   await checkGBalance(u1, 10);
@@ -223,6 +226,9 @@ const testCallContract = async (paySecond) => {
   d("About to cast final supporting vote...");
   dBalance(u1);
   await dcall (u3, "support", [p2, govStartBalance]);
+  d("About to execute...");
+  dBalance(u1);
+  await dcall (u5, "execute", [p2]);
   const ee2 = await ctcDao.events.Log.executed.next();
   await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
   await checkPoor(u1, nb + 20, false);
@@ -251,6 +257,7 @@ const testCallContract = async (paySecond) => {
   await dcall (u2, "support", [p3, govStartBalance]);
   await checkPoor(u1, nb + 40, true);
   await dcall (u3, "support", [p3, govStartBalance]);
+  await dcall (u3, "execute", [p3]);
   const ee3 = await ctcDao.events.Log.executed.next();
   await mcall (testProposalContract, subCtc1.getInfo(), admin, "poke", []);
   dBalance(u1);
@@ -285,6 +292,7 @@ await testCallContract(false);
   await dcall (u1, "support", [p1, govStartBalance]);
   await dcall (u2, "support", [p1, govStartBalance]);
   await dcall (u3, "support", [p1, govStartBalance]);
+  await dcall (u4, "execute", [p1]);
   const ee1 = await ctcDao.events.Log.executed.next();
   d("Quorum size change done!");
   await dcall (u1, "unsupport", [p1]);
@@ -295,6 +303,7 @@ await testCallContract(false);
   await dcall(u1, "propose", [["ChangeParams", [10, deadlineInit]], "Go nuts!"]);
   const p2 = (await ctcDao.events.Log.propose.next()).what[0];
   await dcall (u1, "support", [p2, govStartBalance]);
+  await dcall (u5, "execute", [p2]);
   const ee2 = await ctcDao.events.Log.executed.next();
   d("Quorum size change done!");
   await dcall (u1, "unsupport", [p2]);
@@ -308,6 +317,7 @@ await testCallContract(false);
   await dcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]], "proposal message"]);
   const p1 = (await ctcDao.events.Log.propose.next()).what[0];
   await expect(async () => await dcall(u1, "propose", [["Payment", [u1.getAddress(), stdlib.parseCurrency(10), 10]], "proposal message"]), "Can't make a second proposal.");
+  await expect(async () => await dcall(u1, "execute", [p1]), "Can't exec a proposal that hasn't passed.");
   await expect(async () => await dcall(u2, "unpropose", [p1]), "Can't unpropose for someone else");
   await dcall(u1, "unpropose", [p1]);
   await expect(async () => await dcall(u2, "support", [p1, govStartBalance]), "Can't support unproposed proposals")
@@ -326,7 +336,10 @@ await testCallContract(false);
     const netAmt = govOrNet ? 0 : tooMuchMoneyNet;
     await dcall(u1, "propose", [[method, [addr, netAmt, govAmt, ...callArgs]], "msg"]);
     const pb = (await ctcDao.events.Log.propose.next()).what[0];
-    await expect(async () => await dcall (u1, "support", [pb, govStartBalance]), `Can't pass final support for ${payOrCall ? "pay" : "call"} when there aren't enough ${govOrNet ? "government" : "network"} tokens to pay.`);
+    // We CAN give support to make a vote pass that doesn't have funds, but we can't execute it.
+    await dcall (u1, "support", [pb, govStartBalance]);
+    await expect(async () => await dcall (u1, "exec", [pb]), `Can't exec ${payOrCall ? "pay" : "call"} when there aren't enough ${govOrNet ? "government" : "network"} tokens to pay.`);
+    await dcall (u1, "unsupport", [pb]);
     await dcall(u1, "unpropose", [pb]);
   }
   await tooMuchMoneyProp(false, false);
@@ -339,6 +352,7 @@ await testCallContract(false);
   await dcall(u1, "propose", [["ChangeParams", [quorumSizeInit, deadlineInit]], "Return to normal params"]);
   const pq = (await ctcDao.events.Log.propose.next()).what[0];
   await dcall (u1, "support", [pq, govStartBalance]);
+  await dcall (u1, "execute", [pq]);
   const eeq = await ctcDao.events.Log.executed.next();
   await dcall (u1, "unsupport", [pq]);
 
