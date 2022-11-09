@@ -45,10 +45,10 @@ const canSub = (a,b) => {
   check(a > b);
 };
 const canMul = (a,b) => {
-  check(UInt.max / a >= b);
+  check(a == 0 || UInt.max / a >= b);
 };
 const canMul256 = (a,b) => {
-  check(UInt256.max / a >= b);
+  check(a == UInt256(0) || UInt256.max / a >= b);
 };
 
 export const main = Reach.App(() => {
@@ -62,6 +62,7 @@ export const main = Reach.App(() => {
     unpropose: Fun([ProposalId], Null),
     support: Fun([ProposalId, UInt], Null),
     unsupport: Fun([ProposalId], Null),
+    execute: Fun([ProposalId], Null),
     fund: Fun([UInt, UInt], Null),
     getUntrackedFunds: Fun([], Null),
   });
@@ -119,6 +120,19 @@ export const main = Reach.App(() => {
         .invariant(config.quorumSize <= quorumMax)
         .while( ! done )
         .paySpec([govToken])
+        .define(() => {
+          const livePropChecks = ([proposer, proposalTime]) => {
+            const mProp = proposalMap[proposer];
+            const prop = someProp(mProp);
+            const [curPropTime, _, _, _, alreadyCompleted] = prop;
+            check(curPropTime != 0, "time not zero");
+            check(curPropTime == proposalTime, "timestamp matches current proposal for address");
+            check(!alreadyCompleted, "proposal not already done");
+            canAdd(proposalTime, config.deadline);
+            enforce(thisConsensusTime() <= proposalTime + config.deadline, "proposal not past deadline");
+            return prop;
+          }
+        })
         .api_(User.propose, (action, message) => {
           const mCurProp = proposalMap[this];
           check(isNone(mCurProp));
@@ -146,43 +160,27 @@ export const main = Reach.App(() => {
             return {done, config, treasury, govTokensInVotes};
           }];
         })
-        .api_(User.support, ([proposer, proposalTime], voteAmount) => {
+        .api_(User.execute, ([proposer, proposalTime]) => {
           // Check that the proposal exists and that the voter doesn't currently support anything.
-          const voter = this;
-          const mProp = proposalMap[proposer];
-          const [curPropTime, curPropVotes, action, message, alreadyCompleted] =
-                someProp(mProp);
-          check(govTokenTotal >= voteAmount);
-          check(govTokenTotal - voteAmount >= treasury.gov + govTokensInVotes);
-          check(curPropTime != 0, "time not zero");
-          check(curPropTime == proposalTime, "timestamp matches current proposal for address");
-          check(!alreadyCompleted, "proposal not already done");
-          canAdd(proposalTime, config.deadline);
-          enforce(thisConsensusTime() <= proposalTime + config.deadline, "proposal not past deadline");
-          canAdd(govTokensInVotes, voteAmount);
-          canAdd(voteAmount, curPropVotes);
-          const mVoterCurrentSupport = voterMap[voter];
-          check(mVoterCurrentSupport == Maybe(Tuple(ProposalId, UInt)).None(), "voter not supporting other already");
-          const newGovTokensInVotes = govTokensInVotes + voteAmount;
-          const newPropVotes = curPropVotes + voteAmount;
+          const [_, curPropVotes, action, message, _] =
+                livePropChecks([proposer, proposalTime]);
           const totalVotes = govTokenTotal - treasury.gov;
-          check(newPropVotes <= totalVotes);
-          // XXX I think in the real version, we should make acting a separate action, because it changes the resources needed to execute the code and thus may be unpredictable/expensive for the final supporter
-          const pass = UInt256(newPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
+          canMul256(UInt256(curPropVotes), UInt256(quorumMax));
+          canMul256(UInt256(config.quorumSize), UInt256(totalVotes));
+          const pass = UInt256(curPropVotes) * UInt256(quorumMax) > UInt256(config.quorumSize) * UInt256(totalVotes);
+          check(pass, "proposal has passed");
 
           action.match({
             ChangeParams: ([quorumSize, _]) => {
               check(quorumSize <= quorumMax);
             },
             Payment: (([_, networkAmt, govAmt]) => {
-              canAdd(newGovTokensInVotes, govAmt);
               if (pass) {
                 check(treasury.net >= networkAmt, "NT balance greater than pay amount");
                 check(treasury.gov >= govAmt, "GT balance greater than pay amount");
               }
             }),
             CallContract: (([_, networkAmt, govAmt, _]) => {
-              canAdd(newGovTokensInVotes, govAmt);
               if (pass) {
                 check(treasury.net >= networkAmt, "NT balance greater than pay amount");
                 check(treasury.gov >= govAmt, "GT balance greater than pay amount");
@@ -191,11 +189,9 @@ export const main = Reach.App(() => {
             default: (_) => {return;},
           });
 
-          return [ [0, [voteAmount, govToken]], (k) => {
-            const newProp = [proposalTime, newPropVotes, action, message, pass];
+          return [ [0, [0, govToken]], (k) => {
+            const newProp = [proposalTime, curPropVotes, action, message, pass];
             proposalMap[proposer] = newProp;
-            voterMap[voter] = [[proposer, proposalTime], voteAmount];
-            Log.support(voter, voteAmount, [proposer, proposalTime])
 
             const exec = () => {
               if (pass) {
@@ -239,6 +235,38 @@ export const main = Reach.App(() => {
               done,
               config: newConfig,
               treasury: newTreasury,
+              govTokensInVotes,
+            };
+          }];
+        })
+        .api_(User.support, ([proposer, proposalTime], voteAmount) => {
+          // Check that the proposal exists and that the voter doesn't currently support anything.
+          const voter = this;
+          const [_, curPropVotes, action, message, alreadyCompleted] =
+                livePropChecks([proposer, proposalTime]);
+          check(govTokenTotal >= voteAmount);
+          check(govTokenTotal - voteAmount >= treasury.gov + govTokensInVotes);
+          canAdd(govTokensInVotes, voteAmount);
+          canAdd(voteAmount, curPropVotes);
+          const mVoterCurrentSupport = voterMap[voter];
+          check(mVoterCurrentSupport == Maybe(Tuple(ProposalId, UInt)).None(), "voter not supporting other already");
+          const newGovTokensInVotes = govTokensInVotes + voteAmount;
+          const newPropVotes = curPropVotes + voteAmount;
+          const totalVotes = govTokenTotal - treasury.gov;
+          check(newPropVotes <= totalVotes);
+
+
+          return [ [0, [voteAmount, govToken]], (k) => {
+            const newProp = [proposalTime, newPropVotes, action, message, alreadyCompleted];
+            proposalMap[proposer] = newProp;
+            voterMap[voter] = [[proposer, proposalTime], voteAmount];
+            Log.support(voter, voteAmount, [proposer, proposalTime])
+
+            k(null);
+            return {
+              done,
+              config,
+              treasury,
               govTokensInVotes: newGovTokensInVotes,
             };
           }];
